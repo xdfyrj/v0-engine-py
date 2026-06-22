@@ -1,0 +1,40 @@
+{
+  "case": "fg03",
+  "build": "O3S",
+  "schema_version": 1,
+  "note": "anchor = FUN_00113fe0 (main). 13 user candidates. leaf_q fully inlined away; share_i32 (FUN_00114d70) collapsed into a leaf.",
+  "nodes": [
+    {"id": "FUN_001157e0", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_001156e0", "type": "user", "scored": true, "calls": []},
+
+    {"id": "FUN_00116590", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114d70", "count": 3}]},
+    {"id": "FUN_00116330", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114a10", "count": 3}]},
+    {"id": "FUN_00116000", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114690", "count": 3}]},
+
+    {"id": "FUN_00115e70", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114d70", "count": 2}]},
+    {"id": "FUN_00115960", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114a10", "count": 2}]},
+    {"id": "FUN_00115bb0", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114690", "count": 2}]},
+
+    {"id": "FUN_00114d70", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00114a10", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_001154d0", "count": 2}]},
+    {"id": "FUN_00114690", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00115260", "count": 2}]},
+
+    {"id": "FUN_001154d0", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00115260", "type": "user", "scored": true, "calls": []},
+
+    {"id": "FUN_00113fe0", "type": "anchor", "scored": false,
+     "calls": [
+       {"target": "FUN_001157e0", "count": 1}, {"target": "FUN_001156e0", "count": 1},
+       {"target": "FUN_00116590", "count": 1}, {"target": "FUN_00116330", "count": 1},
+       {"target": "FUN_00116000", "count": 1}, {"target": "FUN_00115e70", "count": 1},
+       {"target": "FUN_00115960", "count": 1}, {"target": "FUN_00115bb0", "count": 1}]}
+  ]
+}

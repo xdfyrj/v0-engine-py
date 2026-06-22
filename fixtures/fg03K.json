@@ -1,0 +1,46 @@
+{
+  "case": "fg03",
+  "build": "O3KS",
+  "schema_version": 1,
+  "note": "anchor = FUN_00114070 (main). 17 user candidates. 5 generic families + 2 relation-isomorphic decoys.",
+  "nodes": [
+    {"id": "FUN_00115780", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00115680", "type": "user", "scored": true, "calls": []},
+
+    {"id": "FUN_00116530", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114a30", "count": 3}]},
+    {"id": "FUN_001162d0", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_001148e0", "count": 3}]},
+    {"id": "FUN_00115fa0", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114720", "count": 3}]},
+
+    {"id": "FUN_00115e10", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114a30", "count": 2}]},
+    {"id": "FUN_00115900", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_001148e0", "count": 2}]},
+    {"id": "FUN_00115b50", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114720", "count": 2}]},
+
+    {"id": "FUN_00114a30", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114d90", "count": 2}, {"target": "FUN_00115100", "count": 1}]},
+    {"id": "FUN_001148e0", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114ef0", "count": 2}, {"target": "FUN_00115440", "count": 1}]},
+    {"id": "FUN_00114720", "type": "user", "scored": true,
+     "calls": [{"target": "FUN_00114b20", "count": 2}, {"target": "FUN_00115250", "count": 1}]},
+
+    {"id": "FUN_00114d90", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00114ef0", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00114b20", "type": "user", "scored": true, "calls": []},
+
+    {"id": "FUN_00115100", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00115440", "type": "user", "scored": true, "calls": []},
+    {"id": "FUN_00115250", "type": "user", "scored": true, "calls": []},
+
+    {"id": "FUN_00114070", "type": "anchor", "scored": false,
+     "calls": [
+       {"target": "FUN_00115780", "count": 1}, {"target": "FUN_00115680", "count": 1},
+       {"target": "FUN_00116530", "count": 1}, {"target": "FUN_001162d0", "count": 1},
+       {"target": "FUN_00115fa0", "count": 1}, {"target": "FUN_00115e10", "count": 1},
+       {"target": "FUN_00115900", "count": 1}, {"target": "FUN_00115b50", "count": 1}]}
+  ]
+}
