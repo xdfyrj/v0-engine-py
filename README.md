@@ -9,12 +9,12 @@ Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 ## Pipeline
 
 ```text
-fixtures/*.json
+fixtures/*.fixture.json
   -> loader.py
   -> engine.py strict Rule R
   -> predicted clusters
   -> scores.py
-  <- ground_truth/*.json
+  <- ground_truth/*.gt.json
   -> P / R / F1 / ARI + floor diagnostics
 ```
 
@@ -40,7 +40,7 @@ test/test_scores.py   fg01/fg02/fg03K/fg03 metric regression
 
 ## Fixture JSON
 
-`fixtures/*.json`는 함수 관계만 담는다.
+`fixtures/*.fixture.json`는 함수 관계만 담는다.
 
 ```json
 {
@@ -82,7 +82,7 @@ Rules:
 
 ## Ground Truth JSON
 
-`ground_truth/*.json`는 scorer 전용 정답이다.
+`ground_truth/*.gt.json`는 scorer 전용 정답이다.
 
 ```json
 {
@@ -194,7 +194,7 @@ Diagnostics:
 Run the engine on one fixture:
 
 ```bash
-python3 run_case.py fixtures/fg01.json
+python3 run_case.py fixtures/fg01.fixture.json
 ```
 
 Expected fg01 output:
@@ -207,7 +207,7 @@ Expected fg01 output:
 Score one case:
 
 ```bash
-python3 scores.py fixtures/fg02.json ground_truth/fg02.json
+python3 scores.py fixtures/fg02.fixture.json ground_truth/fg02.gt.json
 ```
 
 Run regression tests:
@@ -230,10 +230,10 @@ fg03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
 ## Current Data
 
 ```text
-fixtures/fg01.json        ground_truth/fg01.json
-fixtures/fg02.json        ground_truth/fg02.json
-fixtures/fg03K.json       ground_truth/fg03K.json
-fixtures/fg03.json        ground_truth/fg03.json
+fixtures/fg01.fixture.json        ground_truth/fg01.gt.json
+fixtures/fg02.fixture.json        ground_truth/fg02.gt.json
+fixtures/fg03K.fixture.json       ground_truth/fg03K.gt.json
+fixtures/fg03.fixture.json        ground_truth/fg03.gt.json
 ```
 
 Naming:

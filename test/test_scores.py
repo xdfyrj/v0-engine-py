@@ -15,10 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scores import score_case
 
 CASES = [
-    ("fixtures/fg01.json",      "ground_truth/fg01.json",      (1.00, 1.00, 1.00, 1.00)),
-    ("fixtures/fg02.json",      "ground_truth/fg02.json",      (0.29, 1.00, 0.44, 0.39)),
-    ("fixtures/fg03K.json",     "ground_truth/fg03K.json",     (0.94, 1.00, 0.97, 0.96)),
-    ("fixtures/fg03.json",      "ground_truth/fg03.json",      (0.80, 0.40, 0.53, 0.49)),
+    ("fixtures/fg01.fixture.json",  "ground_truth/fg01.gt.json",  (1.00, 1.00, 1.00, 1.00)),
+    ("fixtures/fg02.fixture.json",  "ground_truth/fg02.gt.json",  (0.29, 1.00, 0.44, 0.39)),
+    ("fixtures/fg03K.fixture.json", "ground_truth/fg03K.gt.json", (0.94, 1.00, 0.97, 0.96)),
+    ("fixtures/fg03.fixture.json",  "ground_truth/fg03.gt.json",  (0.80, 0.40, 0.53, 0.49)),
 ]
 
 

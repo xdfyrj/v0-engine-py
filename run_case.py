@@ -6,7 +6,7 @@ from engine import run_strict_rule_r
 from loader import load_case
 
 
-DEFAULT_FIXTURE = "./fixtures/fg01.json"
+DEFAULT_FIXTURE = "./fixtures/fg01.fixture.json"
 
 
 def main(argv: list[str] | None = None) -> int:
