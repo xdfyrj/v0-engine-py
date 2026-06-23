@@ -198,7 +198,8 @@ It is intentionally shallow:
 
 - function boundary discovery is delegated to radare2
 - std/runtime/library classification is not implemented in this project
-- Rust root auto-detection follows `entry0 -> __libc_start_main(wrapper) -> wrapper(real_main, ...)`
+- Rust root auto-detection follows the known Rust/glibc startup pattern:
+  `entry0 -> __libc_start_main(wrapper) -> wrapper -> lang_start_internal(real_main, ...)`
 - edges to functions omitted from output are dropped
 - root is emitted as `anchor/scored=false` by default
 - all other emitted reachable functions are `user/scored=true`
@@ -231,7 +232,8 @@ python3 binary_extractor.py bin/family_graph_01.bin --list-functions
 Notes:
 
 - without `--root`, the extractor first tries `main`/`sym.main`, then the Rust startup wrapper pattern, then `entry0`
-- for this corpus, the wrapper often is not a radare2 function; the extractor disassembles it linearly and defines the real Rust main with `af @ <addr>`
+- for this corpus, the wrapper often is not a radare2 function; the extractor disassembles it linearly, recovers the main-pointer loaded for the `lang_start_internal` call, and defines the real Rust main with `af @ <addr>`
+- this is an explicit Rust/glibc toolchain-pattern assumption for the controlled corpus, not general indirect-dispatch recovery
 - `--root` accepts radare2 name, raw address, raw `FUN_000...` id, or biased `FUN_001...` id.
 - `--max-depth` controls BFS depth from root; omit it for full reachable closure.
 - `--exclude-regex` may be passed multiple times to drop non-root functions by id/name/address.

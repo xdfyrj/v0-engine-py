@@ -38,6 +38,8 @@ def check_rust_startup_main_detection() -> int:
                     "disasm": "lea rax, [rip - 0xbbe]",
                     "ptr": 0x14020,
                 },
+                {"opcode": "mov qword [rsp], rax", "type": "mov"},
+                {"opcode": "call qword [rip + 0x4091b]", "type": "ircall"},
                 {"opcode": "ret", "type": "ret"},
             ],
         }

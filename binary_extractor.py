@@ -155,12 +155,11 @@ class BinaryExtractor:
 
         for op in pdf.get("ops") or []:
             opcode = str(op.get("opcode") or "")
-            disasm = str(op.get("disasm") or "")
             if opcode.startswith("lea rdi,") and isinstance(op.get("ptr"), int):
                 last_rdi_ptr = op["ptr"]
                 continue
 
-            if "__libc_start_main" in f"{opcode} {disasm}" and last_rdi_ptr is not None:
+            if "__libc_start_main" in self._op_text(op) and last_rdi_ptr is not None:
                 return last_rdi_ptr
 
         return None
@@ -170,17 +169,43 @@ class BinaryExtractor:
         if isinstance(ops, dict):
             ops = ops.get("ops") or []
 
+        pending_main_addr: int | None = None
+        saw_main_pointer_store = False
+
         for op in ops:
             opcode = str(op.get("opcode") or "")
             op_type = str(op.get("type") or "")
 
             if opcode.startswith("lea rax,") and isinstance(op.get("ptr"), int):
-                return op["ptr"]
+                pending_main_addr = op["ptr"]
+                saw_main_pointer_store = False
+                continue
+
+            if pending_main_addr is not None and self._stores_rax_as_lang_start_arg(op):
+                saw_main_pointer_store = True
+                continue
+
+            if pending_main_addr is not None and self._is_call_op(op):
+                text = self._op_text(op)
+                if "lang_start_internal" in text or saw_main_pointer_store:
+                    return pending_main_addr
 
             if op_type in {"ret", "trap"} or opcode.startswith(("ret", "hlt", "int3")):
                 break
 
         return None
+
+    @staticmethod
+    def _stores_rax_as_lang_start_arg(op: dict[str, Any]) -> bool:
+        opcode = str(op.get("opcode") or "")
+        return opcode in {
+            "mov qword [rsp], rax",
+            "mov [rsp], rax",
+        }
+
+    @staticmethod
+    def _op_text(op: dict[str, Any]) -> str:
+        return f"{op.get('opcode') or ''} {op.get('disasm') or ''}"
 
     def _ensure_function_at(self, addr: int) -> R2Function | None:
         existing = self.by_addr.get(addr)
