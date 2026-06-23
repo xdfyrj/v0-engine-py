@@ -4,7 +4,7 @@ Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 
 이 프로젝트는 stripped binary에서 추출했다고 가정한 함수 간 호출 관계 JSON을 입력으로 받아, strict Rule R color refinement를 실행하고, 별도 ground truth JSON과 비교해 pairwise Precision/Recall/F1 및 ARI를 계산한다.
 
-현재 범위는 **Axis 1 relation-only grouping engine + scorer**이다. 실제 바이너리 extractor, Axis 2/3/4 feature extraction, oracle/count-priority policy는 아직 포함하지 않는다.
+현재 범위는 **Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority policy, std/library classifier는 아직 포함하지 않는다.
 
 ## Pipeline
 
@@ -29,6 +29,7 @@ fixtures/*.fixture.json
 ```text
 model.py              dataclass model: Call, Node, Case
 loader.py             fixture JSON loader + validator
+binary_extractor.py   radare2 call graph -> fixture JSON 초안
 engine.py             strict Rule R color refinement engine
 scores.py             ground truth loader + pairwise scorer + CLI
 run_case.py           one fixture -> rounds/clusters 출력
@@ -189,6 +190,55 @@ Diagnostics:
 - `relation_indistinguishable`: other false merge
 - `fragmented_origins`: same origin split across multiple predicted clusters
 
+## Binary Extractor Draft
+
+`binary_extractor.py`는 radare2/r2pipe로 분석된 함수와 direct call op를 읽어 `fixtures/*.fixture.json` 형식으로 저장한다.
+
+It is intentionally shallow:
+
+- function boundary discovery is delegated to radare2
+- std/runtime/library classification is not implemented in this project
+- Rust root auto-detection follows `entry0 -> __libc_start_main(wrapper) -> wrapper(real_main, ...)`
+- edges to functions omitted from output are dropped
+- root is emitted as `anchor/scored=false` by default
+- all other emitted reachable functions are `user/scored=true`
+- output IDs use `FUN_001...` style by default via `--id-bias 0x100000`
+- direct `call` edges and tail-call-like unconditional `jmp` edges are counted
+
+Tail-call rule:
+
+- count direct `call` targets resolved by radare2
+- also count an unconditional `jmp` only when its target is exactly another radare2 function's start address
+- do not count conditional jumps
+- do not count jumps to addresses inside the current function
+
+Recommended workflow:
+
+```bash
+python3 binary_extractor.py bin/family_graph_01.bin \
+  --case fg01_auto \
+  --build O3S \
+  --max-depth 2 \
+  -o fixtures/fg01_auto.fixture.json
+```
+
+If auto-detection fails, inspect radare2 functions and pass `--root` manually:
+
+```bash
+python3 binary_extractor.py bin/family_graph_01.bin --list-functions
+```
+
+Notes:
+
+- without `--root`, the extractor first tries `main`/`sym.main`, then the Rust startup wrapper pattern, then `entry0`
+- for this corpus, the wrapper often is not a radare2 function; the extractor disassembles it linearly and defines the real Rust main with `af @ <addr>`
+- `--root` accepts radare2 name, raw address, raw `FUN_000...` id, or biased `FUN_001...` id.
+- `--max-depth` controls BFS depth from root; omit it for full reachable closure.
+- `--exclude-regex` may be passed multiple times to drop non-root functions by id/name/address.
+- `--id-bias 0` emits raw radare2-style IDs.
+- For primary evaluation, avoid case-specific `--exclude-regex` filtering unless it is explicitly documented as manual candidate selection.
+- For this research, std/library separation is treated as an external preprocessing assumption, not as a core contribution of the grouping method. If a fixture depends on manual candidate selection, record that as a limitation instead of treating it as blind extraction.
+
 ## Commands
 
 Run the engine on one fixture:
@@ -214,8 +264,9 @@ Run regression tests:
 
 ```bash
 python3 test/test_engine.py
+python3 test/test_binary_extractor.py
 python3 test/test_scores.py
-python3 -m py_compile model.py loader.py engine.py scores.py run_case.py test/test_engine.py test/test_scores.py
+python3 -m py_compile binary_extractor.py model.py loader.py engine.py scores.py run_case.py test/test_engine.py test/test_binary_extractor.py test/test_scores.py
 ```
 
 Current score regression targets:
