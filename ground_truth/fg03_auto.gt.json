@@ -1,0 +1,56 @@
+{
+  "case": "fg03",
+  "build": "O3S",
+  "schema_version": 1,
+  "origins": [
+    {
+      "origin": "share",
+      "type": "generic",
+      "members": [
+        "FUN_00114690",
+        "FUN_00114a10",
+        "FUN_00114d70"
+      ]
+    },
+    {
+      "origin": "leaf_p",
+      "type": "generic",
+      "members": [
+        "FUN_00115260",
+        "FUN_001154d0"
+      ]
+    },
+    {
+      "origin": "decoy_a",
+      "type": "concrete",
+      "members": [
+        "FUN_001156e0"
+      ]
+    },
+    {
+      "origin": "decoy_b",
+      "type": "concrete",
+      "members": [
+        "FUN_001157e0"
+      ]
+    },
+    {
+      "origin": "drive_x",
+      "type": "generic",
+      "members": [
+        "FUN_00115960",
+        "FUN_00115bb0",
+        "FUN_00115e70"
+      ]
+    },
+    {
+      "origin": "drive_y",
+      "type": "generic",
+      "members": [
+        "FUN_00116000",
+        "FUN_00116330",
+        "FUN_00116590"
+      ]
+    }
+  ]
+}

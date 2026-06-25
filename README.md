@@ -30,6 +30,7 @@ fixtures/*.fixture.json
 model.py              dataclass model: Call, Node, Case
 loader.py             fixture JSON loader + validator
 binary_extractor.py   radare2 call graph -> fixture JSON 초안
+gt_extractor.py       non-stripped symbol table -> ground truth JSON
 engine.py             strict Rule R color refinement engine
 scores.py             ground truth loader + pairwise scorer + CLI
 run_case.py           one fixture -> rounds/clusters 출력
@@ -107,10 +108,47 @@ Rules:
 Rules:
 
 - origin object fields are exactly `origin`, `type`, `members`
-- `type` is one of `generic`, `concrete`, `decoy`
+- `type` is one of `generic`, `concrete`
 - each scored fixture node must appear in exactly one origin
 - ground truth universe must equal fixture nodes with `scored=true`
 - `case` and `build` must match the fixture
+
+## Ground Truth Extractor Draft
+
+`gt_extractor.py`는 non-stripped Rust binary의 demangled symbol table에서 `ground_truth/*.gt.json`를 생성한다.
+
+Current policy:
+
+- symbol source is `nm -n -C`
+- controlled builds are expected to use Rust legacy symbol mangling; v0-style demangled generic arguments like `::<i32>` are stripped defensively when present
+- only text symbols whose demangled name starts with the target crate prefix are kept, e.g. `family_graph_01::`
+- `main` is excluded because it is an anchor, not a scored function
+- raw symbol address is converted to the fixture id format with `addr + 0x100000`, e.g. `0x13f00 -> FUN_00113f00`
+- same demangled origin name becomes one ground truth origin group
+- if multiple symbols resolve to the same address, the address/member is emitted once and the alias is recorded in top-level `note`
+- origin names matching `^(c_|decoy_)` are `concrete`
+- all other origins are `generic`
+- the extractor emits only `generic` and `concrete`
+
+Interpretation:
+
+- family membership is compiler-derived from non-stripped symbol addresses and demangled source paths
+- `generic`/`concrete` kind labels are author-defined naming conventions, not compiler facts
+
+Example:
+
+```bash
+python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/fg01_auto.gt.json
+```
+
+For freeze/regression generation, pass the matching fixture as a validation guard:
+
+```bash
+python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/fg01_auto.gt.json \
+  --fixture fixtures/fg01.fixture.json
+```
+
+For `family_graph_03K.gt.bin`, the demangled prefix is still `family_graph_03::`; the build label is `O3KS`.
 
 ## Strict Rule R
 
@@ -186,7 +224,6 @@ Metrics:
 Diagnostics:
 
 - `concrete_mirror_floor`: false merge involving a concrete origin
-- `decoy_floor`: false merge between decoy origins
 - `relation_indistinguishable`: other false merge
 - `fragmented_origins`: same origin split across multiple predicted clusters
 
@@ -259,7 +296,7 @@ Expected fg01 output:
 Score one case:
 
 ```bash
-python3 scores.py fixtures/fg02.fixture.json ground_truth/fg02.gt.json
+python3 scores.py fixtures/fg02.fixture.json ground_truth/fg02_auto.gt.json
 ```
 
 Run regression tests:
@@ -267,8 +304,9 @@ Run regression tests:
 ```bash
 python3 test/test_engine.py
 python3 test/test_binary_extractor.py
+python3 test/test_gt_extractor.py
 python3 test/test_scores.py
-python3 -m py_compile binary_extractor.py model.py loader.py engine.py scores.py run_case.py test/test_engine.py test/test_binary_extractor.py test/test_scores.py
+python3 -m py_compile binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py
 ```
 
 Current score regression targets:
@@ -283,11 +321,14 @@ fg03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
 ## Current Data
 
 ```text
-fixtures/fg01.fixture.json        ground_truth/fg01.gt.json
-fixtures/fg02.fixture.json        ground_truth/fg02.gt.json
-fixtures/fg03K.fixture.json       ground_truth/fg03K.gt.json
-fixtures/fg03.fixture.json        ground_truth/fg03.gt.json
+fixtures/fg01.fixture.json        ground_truth/fg01_auto.gt.json
+fixtures/fg02.fixture.json        ground_truth/fg02_auto.gt.json
+fixtures/fg03K.fixture.json       ground_truth/fg03K_auto.gt.json
+fixtures/fg03.fixture.json        ground_truth/fg03_auto.gt.json
 ```
+
+The non-`_auto` ground truth files are retained as hand-written references.
+Regression scoring uses the compiler-derived `_auto` files.
 
 Naming:
 

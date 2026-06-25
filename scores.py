@@ -25,13 +25,13 @@ from model import Case
 
 # ---------------------------------------------------------- ground truth model
 
-ORIGIN_TYPES = {"generic", "concrete", "decoy"}
+ORIGIN_TYPES = {"generic", "concrete"}
 
 
 @dataclass(frozen=True)
 class OriginGroup:
     origin: str
-    type: str                        # generic | concrete | decoy
+    type: str                        # generic | concrete
     members: tuple[str, ...]
 
 
@@ -250,10 +250,7 @@ def _adjusted_rand_index(tp: int, fp: int, fn: int, tn: int) -> float:
 
 
 def _floor_label(type_a: str, type_b: str) -> str:
-    pair = tuple(sorted((type_a, type_b)))
-    if pair == ("decoy", "decoy"):
-        return "decoy_floor"
-    if "concrete" in pair:
+    if "concrete" in {type_a, type_b}:
         return "concrete_mirror_floor"
     return "relation_indistinguishable"
 

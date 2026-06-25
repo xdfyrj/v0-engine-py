@@ -1,0 +1,67 @@
+{
+  "case": "fg02",
+  "build": "O3S",
+  "schema_version": 1,
+  "origins": [
+    {
+      "origin": "process_beta",
+      "type": "generic",
+      "members": [
+        "FUN_00114000",
+        "FUN_00114120"
+      ]
+    },
+    {
+      "origin": "recurse_beta",
+      "type": "generic",
+      "members": [
+        "FUN_00114380",
+        "FUN_00114500"
+      ]
+    },
+    {
+      "origin": "process_alpha",
+      "type": "generic",
+      "members": [
+        "FUN_001145c0",
+        "FUN_00114820"
+      ]
+    },
+    {
+      "origin": "recurse_alpha",
+      "type": "generic",
+      "members": [
+        "FUN_00114940",
+        "FUN_001149d0"
+      ]
+    },
+    {
+      "origin": "c_process_alpha_i32",
+      "type": "concrete",
+      "members": [
+        "FUN_00114af0"
+      ]
+    },
+    {
+      "origin": "c_recurse_alpha_i32",
+      "type": "concrete",
+      "members": [
+        "FUN_00114c10"
+      ]
+    },
+    {
+      "origin": "c_process_alpha_wide",
+      "type": "concrete",
+      "members": [
+        "FUN_00114ca0"
+      ]
+    },
+    {
+      "origin": "c_recurse_alpha_wide",
+      "type": "concrete",
+      "members": [
+        "FUN_00114f10"
+      ]
+    }
+  ]
+}

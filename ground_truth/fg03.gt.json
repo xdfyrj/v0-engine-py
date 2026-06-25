@@ -40,14 +40,14 @@
     },
     {
       "origin": "decoy_a",
-      "type": "decoy",
+      "type": "concrete",
       "members": [
         "FUN_001157e0"
       ]
     },
     {
       "origin": "decoy_b",
-      "type": "decoy",
+      "type": "concrete",
       "members": [
         "FUN_001156e0"
       ]
