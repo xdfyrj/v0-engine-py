@@ -30,7 +30,7 @@ def case_stem(value: str) -> str:
 
 
 def crate_prefix_from_stem(stem: str) -> str:
-    crate = re.sub(r"(?<=_\d)K$", "", stem)
+    crate = re.sub(r"^(family_graph_\d+)K$", r"\1", stem)
     return f"{crate}::"
 
 

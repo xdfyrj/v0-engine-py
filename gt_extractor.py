@@ -49,7 +49,7 @@ def gt_json_for(stem: str) -> str:
 
 
 def prefix_for(stem: str) -> str:
-    crate = re.sub(r"(?<=_\d)K$", "", stem)
+    crate = re.sub(r"^(family_graph_\d+)K$", r"\1", stem)
     return f"{crate}::"
 
 

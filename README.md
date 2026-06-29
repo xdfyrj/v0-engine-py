@@ -342,6 +342,15 @@ engine.py CG-WL     -> predicted clusters
 scores.py           -> P/R/F1/ARI report
 ```
 
+Regenerate the current family_graph stems:
+
+```bash
+python3 run_case.py family_graph_01 --max-depth 2
+python3 run_case.py family_graph_02 --max-depth 2 --exclude-regex FUN_0014d6b3
+python3 run_case.py family_graph_03K --max-depth 3
+python3 run_case.py family_graph_03 --max-depth 3
+```
+
 Score one case:
 
 ```bash
