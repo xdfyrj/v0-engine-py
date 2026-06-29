@@ -1,4 +1,4 @@
-# Axis 1 call-graph color refinement engine
+# Call-Graph Weisfeiler-Lehman color refinement engine
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ RelationSignature = tuple[
 @dataclass(frozen=True)
 class RelationGraphView:
     """
-    Call graph view used by strict Rule R.
+    Call graph view used by Call-Graph Weisfeiler-Lehman.
 
     This view is derived only from Axis 1 call edges.
     Self-edges are lifted into self_call_count and excluded from
@@ -46,9 +46,9 @@ class RelationGraphView:
 
 
 @dataclass(frozen=True)
-class StrictRuleRResult:
+class CGWLResult:
     """
-    Result of strict Rule R.
+    Result of Call-Graph Weisfeiler-Lehman.
 
     node_color contains colors for all nodes, including anchors.
     cluster_id_by_node and clusters are restricted to scored nodes.
@@ -59,9 +59,9 @@ class StrictRuleRResult:
     rounds: int
 
 
-def run_strict_rule_r(case: Case) -> StrictRuleRResult:
+def run_cg_wl(case: Case) -> CGWLResult:
     """
-    Run strict Rule R.
+    Run Call-Graph Weisfeiler-Lehman.
 
     v0 policy:
       - Axis 1 only.
@@ -73,18 +73,18 @@ def run_strict_rule_r(case: Case) -> StrictRuleRResult:
       - No origin labels, no Axis 2/4, no oracle, no soft merge.
     """
     view = build_relation_graph_view(case)
-    colors = make_initial_rule_r_colors(case, view)
+    colors = make_initial_cg_wl_colors(case, view)
 
     max_rounds = len(view.node_ids)
 
     for round_index in range(1, max_rounds + 1):
-        new_colors = refine_rule_r_once(case, view, colors)
+        new_colors = refine_cg_wl_once(case, view, colors)
 
         if same_partition(view.node_ids, colors, new_colors):
             clusters = make_scored_clusters(case, new_colors)
             cluster_id_by_node = make_cluster_id_by_node(clusters)
 
-            return StrictRuleRResult(
+            return CGWLResult(
                 node_color=new_colors,
                 cluster_id_by_node=cluster_id_by_node,
                 clusters=clusters,
@@ -93,7 +93,7 @@ def run_strict_rule_r(case: Case) -> StrictRuleRResult:
 
         colors = new_colors
 
-    raise RuntimeError("strict Rule R did not reach a fixpoint")
+    raise RuntimeError("CG-WL did not reach a fixpoint")
 
 
 def build_relation_graph_view(case: Case) -> RelationGraphView:
@@ -142,7 +142,7 @@ def build_relation_graph_view(case: Case) -> RelationGraphView:
     )
 
 
-def make_initial_rule_r_colors(
+def make_initial_cg_wl_colors(
     case: Case,
     view: RelationGraphView,
 ) -> dict[NodeId, Color]:
@@ -161,7 +161,7 @@ def make_initial_rule_r_colors(
     return colors
 
 
-def refine_rule_r_once(
+def refine_cg_wl_once(
     case: Case,
     view: RelationGraphView,
     prev_colors: dict[NodeId, Color],
@@ -204,7 +204,7 @@ def _neighbor_color_multiset(
     edges: list[WeightedEdge],
     prev_colors: dict[NodeId, Color],
 ) -> tuple[WeightedNeighborColor, ...]:
-    # Rule R compares neighbor groups, not raw neighbor identities:
+    # CG-WL compares neighbor groups, not raw neighbor identities:
     # key = previous neighbor color, value += static callsite count.
     count_by_color: dict[Color, int] = {}
 

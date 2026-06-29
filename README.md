@@ -2,7 +2,7 @@
 
 Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 
-이 프로젝트는 stripped binary에서 추출했다고 가정한 함수 간 호출 관계 JSON을 입력으로 받아, strict Rule R color refinement를 실행하고, 별도 ground truth JSON과 비교해 pairwise Precision/Recall/F1 및 ARI를 계산한다.
+이 프로젝트는 stripped binary에서 추출했다고 가정한 함수 간 호출 관계 JSON을 입력으로 받아, Call-Graph Weisfeiler-Lehman(CG-WL) color refinement를 실행하고, 별도 ground truth JSON과 비교해 pairwise Precision/Recall/F1 및 ARI를 계산한다.
 
 현재 범위는 **Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority policy, std/library classifier는 아직 포함하지 않는다.
 
@@ -11,7 +11,7 @@ Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 ```text
 fixtures/*.fixture.json
   -> loader.py
-  -> engine.py strict Rule R
+  -> engine.py CG-WL
   -> predicted clusters
   -> scores.py
   <- ground_truth/*.gt.json
@@ -31,7 +31,7 @@ model.py              dataclass model: Call, Node, Case
 loader.py             fixture JSON loader + validator
 binary_extractor.py   radare2 call graph -> fixture JSON 초안
 gt_extractor.py       non-stripped symbol table -> ground truth JSON
-engine.py             strict Rule R color refinement engine
+engine.py             Call-Graph Weisfeiler-Lehman color refinement engine
 scores.py             ground truth loader + pairwise scorer + CLI
 run_case.py           one fixture -> rounds/clusters 출력
 fixtures/             함수 관계 입력 JSON
@@ -150,9 +150,11 @@ python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/fg01_auto.gt.
 
 For `family_graph_03K.gt.bin`, the demangled prefix is still `family_graph_03::`; the build label is `O3KS`.
 
-## Strict Rule R
+## Call-Graph Weisfeiler-Lehman
 
-Implemented in `engine.py` as `run_strict_rule_r(case)`.
+Implemented in `engine.py` as `run_cg_wl(case)`.
+
+CG-WL is a directed, weighted, anchor-aware 1-WL refinement over the call graph.
 
 Used Axis 1 features:
 
@@ -345,4 +347,4 @@ This implementation follows the current research decision:
 - Axis 4 is ablation only
 - feature input and ground truth must remain physically separated
 
-The prototype is intentionally narrow: it validates whether strict Rule R over hand-prepared function relation JSON reproduces the current fg01/fg02/fg03 claims.
+The prototype is intentionally narrow: it validates whether CG-WL over hand-prepared function relation JSON reproduces the current fg01/fg02/fg03 claims.

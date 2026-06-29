@@ -18,7 +18,7 @@ import sys
 from dataclasses import dataclass
 from itertools import combinations
 
-from engine import run_strict_rule_r
+from engine import run_cg_wl
 from loader import load_case
 from model import Case
 
@@ -162,7 +162,7 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
     gt = load_ground_truth(ground_truth_path)
     _check_join(case, gt)
 
-    result = run_strict_rule_r(case)
+    result = run_cg_wl(case)
     cluster_of = result.cluster_id_by_node      # scored nodes only
     origin_of = gt.origin_of()
     type_of_origin = gt.type_of_origin()
