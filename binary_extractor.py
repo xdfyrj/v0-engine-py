@@ -14,6 +14,8 @@ import r2pipe
 
 SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
+DEFAULT_CASE = "unknown"
+DEFAULT_BUILD = "unknown"
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,29 @@ def function_id(addr: int, *, id_bias: int = 0) -> str:
 
 def parse_int(value: str) -> int:
     return int(value, 0)
+
+
+def case_stem(value: str) -> str:
+    name = Path(value).name
+    for suffix in (".fixture.bin", ".fixture.json", ".bin", ".json"):
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
+
+def fixture_binary_for(stem: str) -> str:
+    candidates = [
+        f"bin/{stem}.fixture.bin",
+        f"bin/{stem}.bin",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            return path
+    return candidates[0]
+
+
+def fixture_json_for(stem: str) -> str:
+    return f"fixtures/{stem}.fixture.json"
 
 
 def is_probably_import(func: R2Function) -> bool:
@@ -457,12 +482,26 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "*.fixture.json format."
         )
     )
-    parser.add_argument("binary", help="ELF/Rust binary to analyze")
-    parser.add_argument("--case", help="fixture case name, e.g. fg01")
-    parser.add_argument("--build", help="build label, e.g. O3S")
+    parser.add_argument("binary", help="ELF/Rust binary path, or an example stem")
+    parser.add_argument(
+        "output",
+        nargs="?",
+        help="output path, conventionally fixtures/<case>_auto.fixture.json",
+    )
+    parser.add_argument(
+        "--case",
+        default=DEFAULT_CASE,
+        help=f"fixture case name. Default: {DEFAULT_CASE}",
+    )
+    parser.add_argument(
+        "--build",
+        default=DEFAULT_BUILD,
+        help=f"build label. Default: {DEFAULT_BUILD}",
+    )
     parser.add_argument(
         "-o",
         "--output",
+        dest="output_option",
         help="output path, conventionally fixtures/<case>.fixture.json",
     )
     parser.add_argument(
@@ -515,20 +554,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.output and args.output_option and args.output != args.output_option:
+        parser.error("use either positional output or --output, not both")
+
+    args.output = args.output_option or args.output
+    stem = case_stem(args.binary)
+
+    if not Path(args.binary).exists():
+        args.binary = fixture_binary_for(stem)
+
+    if args.case == DEFAULT_CASE:
+        args.case = stem
+
+    if args.output is None:
+        args.output = fixture_json_for(stem)
+
+    if args.list_functions:
+        return
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-
-    if not args.list_functions:
-        missing = [
-            name
-            for name in ("case", "build", "output")
-            if getattr(args, name) is None
-        ]
-        if missing:
-            parser.error(
-                "--case, --build, and --output are required unless --list-functions is used"
-            )
+    apply_cli_defaults(args, parser)
 
     try:
         fixture = extract_fixture(args)

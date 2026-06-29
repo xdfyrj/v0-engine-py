@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 
+from loader import load_case
 from model import Case, Node
 
 
@@ -20,6 +24,18 @@ RelationSignature = tuple[
     tuple[WeightedNeighborColor, ...],  # OUT multiset
     tuple[WeightedNeighborColor, ...],  # IN multiset
 ]
+
+
+def case_stem(value: str) -> str:
+    name = Path(value).name
+    for suffix in (".fixture.json", ".json"):
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
+
+def fixture_json_for(stem: str) -> str:
+    return f"fixtures/{stem}.fixture.json"
 
 
 @dataclass(frozen=True)
@@ -287,3 +303,39 @@ def _canonicalize_signatures(
 
 def _anchor_color(node_id: NodeId) -> Color:
     return f"ANCHOR:{node_id}"
+
+
+def run_fixture_path(fixture_path: str) -> CGWLResult:
+    return run_cg_wl(load_case(fixture_path))
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run CG-WL on one fixture JSON."
+    )
+    parser.add_argument("fixture", help="fixture JSON path, or an example stem")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    fixture_path = (
+        args.fixture
+        if args.fixture.endswith(".json") or Path(args.fixture).exists()
+        else fixture_json_for(case_stem(args.fixture))
+    )
+
+    try:
+        result = run_fixture_path(fixture_path)
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(result.rounds)
+    print(result.clusters)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

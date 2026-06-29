@@ -33,7 +33,7 @@ binary_extractor.py   radare2 call graph -> fixture JSON 초안
 gt_extractor.py       non-stripped symbol table -> ground truth JSON
 engine.py             Call-Graph Weisfeiler-Lehman color refinement engine
 scores.py             ground truth loader + pairwise scorer + CLI
-run_case.py           one fixture -> rounds/clusters 출력
+run_case.py           stem-based end-to-end pipeline runner
 fixtures/             함수 관계 입력 JSON
 ground_truth/         origin label 정답 JSON
 test/test_engine.py   neighbor color multiset aggregation regression
@@ -148,7 +148,31 @@ python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/fg01_auto.gt.
   --fixture fixtures/fg01.fixture.json
 ```
 
-For `family_graph_03K.gt.bin`, the demangled prefix is still `family_graph_03::`; the build label is `O3KS`.
+For `family_graph_03K.gt.bin`, pass `--prefix family_graph_03::` if the crate
+symbol prefix differs from the binary stem.
+
+## Stem Convention
+
+The convenient commands use a single example stem, such as `family_graph_03`.
+This is not a case table. The tools only expand the stem into paths by a fixed
+file naming convention.
+
+Naming rules:
+
+- stripped/fixture binary: `bin/<stem>.fixture.bin`, falling back to `bin/<stem>.bin`
+- non-stripped GT binary: `gt_bin/<stem>.gt.bin`
+- generated fixture JSON: `fixtures/<stem>.fixture.json`
+- generated ground truth JSON: `ground_truth/<stem>.gt.json`
+
+Example:
+
+```text
+family_graph_03
+  -> bin/family_graph_03.bin
+  -> gt_bin/family_graph_03.gt.bin
+  -> fixtures/family_graph_03.fixture.json
+  -> ground_truth/family_graph_03.gt.json
+```
 
 ## Call-Graph Weisfeiler-Lehman
 
@@ -255,11 +279,13 @@ Tail-call rule:
 Recommended workflow:
 
 ```bash
-python3 binary_extractor.py bin/family_graph_01.bin \
-  --case fg01_auto \
-  --build O3S \
-  --max-depth 2 \
-  -o fixtures/fg01_auto.fixture.json
+python3 binary_extractor.py family_graph_03 --max-depth 3
+```
+
+Equivalent explicit input/output form:
+
+```bash
+python3 binary_extractor.py bin/family_graph_03.bin fixtures/family_graph_03.fixture.json --max-depth 3
 ```
 
 If auto-detection fails, inspect radare2 functions and pass `--root` manually:
@@ -285,7 +311,7 @@ Notes:
 Run the engine on one fixture:
 
 ```bash
-python3 run_case.py fixtures/fg01.fixture.json
+python3 engine.py fixtures/family_graph_03.fixture.json
 ```
 
 Expected fg01 output:
@@ -295,10 +321,49 @@ Expected fg01 output:
 [['FUN_00113e20', 'FUN_00113f00', 'FUN_00113f80'], ['FUN_00114460', 'FUN_00114640', 'FUN_00114880']]
 ```
 
+Stem shortcut:
+
+```bash
+python3 engine.py family_graph_03
+```
+
+Run the full pipeline for one stem:
+
+```bash
+python3 run_case.py family_graph_03 --max-depth 3
+```
+
+This executes:
+
+```text
+binary_extractor.py -> fixtures/family_graph_03.fixture.json
+gt_extractor.py     -> ground_truth/family_graph_03.gt.json
+engine.py CG-WL     -> predicted clusters
+scores.py           -> P/R/F1/ARI report
+```
+
 Score one case:
 
 ```bash
-python3 scores.py fixtures/fg02.fixture.json ground_truth/fg02_auto.gt.json
+python3 scores.py fixtures/family_graph_03.fixture.json ground_truth/family_graph_03.gt.json
+```
+
+Stem shortcut:
+
+```bash
+python3 scores.py family_graph_03
+```
+
+Extract compiler-derived ground truth:
+
+```bash
+python3 gt_extractor.py family_graph_03
+```
+
+Equivalent explicit input/output form:
+
+```bash
+python3 gt_extractor.py gt_bin/family_graph_03.gt.bin ground_truth/family_graph_03.gt.json
 ```
 
 Run regression tests:

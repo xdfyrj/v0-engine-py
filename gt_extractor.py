@@ -14,6 +14,7 @@ from typing import Any
 SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
 DEFAULT_CONCRETE_REGEX = r"^(c_|decoy_)"
+DEFAULT_BUILD = "unknown"
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,27 @@ def function_id(addr: int, *, id_bias: int = DEFAULT_ID_BIAS) -> str:
 
 def parse_int(value: str) -> int:
     return int(value, 0)
+
+
+def case_stem(value: str) -> str:
+    name = Path(value).name
+    for suffix in (".gt.bin", ".gt.json", ".bin", ".json"):
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
+
+def gt_binary_for(stem: str) -> str:
+    return f"gt_bin/{stem}.gt.bin"
+
+
+def gt_json_for(stem: str) -> str:
+    return f"ground_truth/{stem}.gt.json"
+
+
+def prefix_for(stem: str) -> str:
+    crate = re.sub(r"(?<=_\d)K$", "", stem)
+    return f"{crate}::"
 
 
 def run_nm(binary_path: str, nm_tool: str) -> list[str]:
@@ -62,27 +84,6 @@ def parse_nm_lines(lines: list[str]) -> list[Symbol]:
         symbols.append(Symbol(addr=addr, kind=kind, name=name))
 
     return symbols
-
-
-def infer_prefix(binary_path: str) -> str:
-    stem = Path(binary_path).name
-    match = re.search(r"(family_graph_\d+)", stem)
-    if not match:
-        raise ValueError("cannot infer --prefix from binary name")
-    return f"{match.group(1)}::"
-
-
-def infer_case(binary_path: str) -> str:
-    stem = Path(binary_path).name
-    match = re.search(r"family_graph_(\d+)", stem)
-    if not match:
-        raise ValueError("cannot infer --case from binary name")
-    return f"fg{match.group(1)}"
-
-
-def infer_build(binary_path: str) -> str:
-    stem = Path(binary_path).name
-    return "O3KS" if re.search(r"family_graph_\d+K", stem) else "O3S"
 
 
 def origin_from_symbol(demangled_name: str, prefix: str) -> str | None:
@@ -242,14 +243,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Rust binary's demangled symbols."
         )
     )
-    parser.add_argument("binary", help="non-stripped ELF/Rust binary")
+    parser.add_argument("binary", help="non-stripped ELF/Rust binary path, or an example stem")
     parser.add_argument(
         "output",
         nargs="?",
         help="output path. If omitted, writes JSON to stdout.",
     )
-    parser.add_argument("--case", help="case name. Default inferred from binary name")
-    parser.add_argument("--build", help="build label. Default inferred from binary name")
+    parser.add_argument("--case", help="case field written into generated JSON")
+    parser.add_argument(
+        "--build",
+        default=DEFAULT_BUILD,
+        help=f"build field written into generated JSON. Default: {DEFAULT_BUILD}",
+    )
     parser.add_argument(
         "--prefix",
         help=(
@@ -286,18 +291,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.output and args.output_option and args.output != args.output_option:
+        parser.error("use either positional output or --output, not both")
+
+    args.output = args.output_option or args.output
+    stem = case_stem(args.binary)
+
+    if not Path(args.binary).exists():
+        args.binary = gt_binary_for(stem)
+    args.output = args.output or gt_json_for(stem)
+    args.case = args.case or stem
+    args.prefix = args.prefix or prefix_for(stem)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    apply_cli_defaults(args, parser)
 
     try:
-        if args.output and args.output_option and args.output != args.output_option:
-            parser.error("use either positional output or --output, not both")
-
-        output_path = args.output_option or args.output
-        prefix = args.prefix or infer_prefix(args.binary)
-        case = args.case or infer_case(args.binary)
-        build = args.build or infer_build(args.binary)
+        output_path = args.output
+        prefix = args.prefix
+        case = args.case
+        build = args.build
 
         symbols = parse_nm_lines(run_nm(args.binary, args.nm_tool))
         gt = make_ground_truth(

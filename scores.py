@@ -13,10 +13,12 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from dataclasses import dataclass
 from itertools import combinations
+from pathlib import Path
 
 from engine import run_cg_wl
 from loader import load_case
@@ -26,6 +28,22 @@ from model import Case
 # ---------------------------------------------------------- ground truth model
 
 ORIGIN_TYPES = {"generic", "concrete"}
+
+
+def case_stem(value: str) -> str:
+    name = Path(value).name
+    for suffix in (".fixture.json", ".gt.json", ".json"):
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
+
+def fixture_json_for(stem: str) -> str:
+    return f"fixtures/{stem}.fixture.json"
+
+
+def gt_json_for(stem: str) -> str:
+    return f"ground_truth/{stem}.gt.json"
 
 
 @dataclass(frozen=True)
@@ -291,12 +309,39 @@ def format_report(r: ScoreReport) -> str:
     return "\n".join(lines)
 
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Score CG-WL clusters against a ground-truth JSON."
+    )
+    parser.add_argument(
+        "fixture",
+        help="fixture JSON path, or an example stem",
+    )
+    parser.add_argument(
+        "ground_truth",
+        nargs="?",
+        help="ground-truth JSON path",
+    )
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    if len(args) < 2:
-        print("usage: python scores.py <fixture.json> <ground_truth.json>")
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
+    if args.ground_truth is None:
+        stem = case_stem(args.fixture)
+        fixture_path = fixture_json_for(stem)
+        gt_path = gt_json_for(stem)
+    else:
+        fixture_path = args.fixture
+        gt_path = args.ground_truth
+
+    try:
+        print(format_report(score_case(fixture_path, gt_path)))
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(format_report(score_case(args[0], args[1])))
     return 0
 
 
