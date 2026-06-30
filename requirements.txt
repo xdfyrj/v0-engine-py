@@ -1,1 +1,3 @@
-r2pipe
+# Python binding for radare2 used by binary_extractor.py.
+# The radare2 executable itself is a system dependency; see README.md.
+r2pipe>=1.9

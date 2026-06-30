@@ -620,7 +620,6 @@ source path는 같고 type argument만 다른 함수들
 ```python
 make_ground_truth(...)
 function_id(addr, id_bias=0x100000)
-origin_type(...)
 ```
 
 `make_ground_truth()`가 실제 ground truth JSON 내용을 만든다.
@@ -643,7 +642,6 @@ function_id(addr, id_bias=0x100000)
 ```json
 {
   "origin": "share",
-  "type": "generic",
   "members": [
     "FUN_00145a23",
     "FUN_00145a81",
@@ -652,25 +650,9 @@ function_id(addr, id_bias=0x100000)
 }
 ```
 
-여기서 `type`은 현재 `generic`과 `concrete`만 사용한다.
-
-`origin_type()`은 origin 이름을 보고 concrete 여부를 판단한다.
-기본 규칙은 아래와 같다.
-```python
-DEFAULT_CONCRETE_REGEX = r"^(c_|decoy_)"
-```
-
-즉 `c_*`, `decoy_*`로 시작하는 origin은 concrete로 본다.
-나머지는 generic이다.
-
-중요한 점은 `decoy`를 별도 type으로 만들지 않는다는 것이다.
-`decoy_*`는 연구자가 붙인 이름 규칙일 뿐이고, scoring type으로는 concrete singleton에 해당한다.
-따라서 ground truth type universe는 아래 두 개만 갖는다.
-
-```
-generic
-concrete
-```
+ground truth origin group에는 source-level kind label을 넣지 않는다.
+현재 scoring에 필요한 정보는 "같은 origin인가"뿐이므로 `origin`과 `members`만 남긴다.
+generic/concrete/decoy 같은 해석 라벨은 compiler-derived partition 자체가 아니므로 GT schema에서 제거했다.
 
 #### 6단계: address alias / duplicate 처리
 관련 코드:
@@ -797,7 +779,6 @@ ground truth JSON의 한 origin group은 아래와 같다.
 ```json
 {
   "origin": "share",
-  "type": "generic",
   "members": [
     "FUN_00145a23",
     "FUN_00145a81",
@@ -812,7 +793,6 @@ ground truth JSON의 한 origin group은 아래와 같다.
 @dataclass(frozen=True)
 class OriginGroup:
     origin: str
-    type: str
     members: tuple[str, ...]
 ```
 
@@ -827,11 +807,10 @@ class GroundTruth:
     origins: tuple[OriginGroup, ...]
 ```
 
-여기서 중요한 helper가 두 개 있다.
+여기서 중요한 helper는 하나다.
 
 ```python
 origin_of()
-type_of_origin()
 ```
 
 `origin_of()`는 member id에서 origin 이름을 찾기 위한 map을 만든다.
@@ -842,16 +821,6 @@ type_of_origin()
   "FUN_00145a23": "share",
   "FUN_00145a81": "share",
   "FUN_0014e7a3": "share",
-}
-```
-
-`type_of_origin()`은 origin 이름에서 generic/concrete type을 찾기 위한 map을 만든다.
-
-예:
-```python
-{
-  "share": "generic",
-  "c_i32": "concrete",
 }
 ```
 
@@ -867,9 +836,8 @@ _validate_ground_truth(data)
 검증 규칙은 다음과 같다.
 
 - top-level field가 `case`, `build`, `schema_version`, `origins`를 갖는가
-- `schema_version`이 1인가
+- `schema_version`이 2인가
 - origin 이름이 중복되지 않는가
-- type이 `generic` 또는 `concrete`인가
 - members가 비어있지 않은가
 - 같은 member id가 둘 이상의 origin에 들어가지 않는가
 
@@ -989,10 +957,10 @@ pred_same=False, true_same=False  -> TN
 - **TN**: 다른 origin인 두 함수를 서로 다른 cluster로 두었다.
 
 이 연구에서 FP는 precision 문제다.
-다른 family나 concrete를 잘못 합쳤다는 뜻이다.
+다른 origin을 잘못 합쳤다는 뜻이다.
 
 FN은 recall 문제다.
-같은 generic family가 inlining, relation 차이, propagation 차이 때문에 쪼개졌다는 뜻이다.
+같은 origin이 inlining, relation 차이, propagation 차이 때문에 쪼개졌다는 뜻이다.
 
 #### 6단계: Precision / Recall / F1
 핵심 함수:
@@ -1076,32 +1044,11 @@ $$
 따라서 ARI는 단순히 TP가 많다고 높아지는 값이 아니다.
 predicted cluster 크기와 true origin 크기까지 같이 반영한다.
 
-#### 8단계: false merge floor 진단
-핵심 함수:
-```python
-_floor_label(type_a, type_b)
-```
+#### 8단계: false merge 진단
 
-FP가 발생했다는 것은 서로 다른 origin인 두 함수를 Rule R이 같은 cluster로 합쳤다는 뜻이다.
-
-이때 scorer는 두 origin의 type을 보고 floor label을 붙인다.
-
-현재 type은 `generic`, `concrete`만 있다.
-
-규칙은 단순하다.
-
-```python
-if "concrete" in {type_a, type_b}:
-    return "concrete_mirror_floor"
-return "relation_indistinguishable"
-```
-
-즉 concrete가 끼어 있는 false merge는 `concrete_mirror_floor`로 본다.
-
-concrete가 없는데 generic끼리 relation만으로 구분이 안 된 경우는 `relation_indistinguishable`로 둔다.
-
-이 floor label은 engine 입력으로 들어가지 않는다.
-오직 score report에서 오류를 해석하기 위한 진단값이다.
+FP가 발생했다는 것은 서로 다른 origin인 두 함수를 같은 cluster로 합쳤다는 뜻이다.
+현재 scorer는 GT에 type/kind label을 두지 않으므로 false merge에 별도 floor label을 붙이지 않는다.
+report에는 false merge pair 수만 요약한다.
 
 #### 9단계: fragmentation 진단
 관련 코드:
@@ -1142,9 +1089,8 @@ python3 scores.py fixtures/fg03_auto.fixture.json ground_truth/fg03_auto.gt.json
 case : fg03 / O3S
 P=0.80  R=0.40  F1=0.53  ARI=0.49
 TP=4 FP=1 FN=6 TN=67
-false merges (precision floor):
-  concrete_mirror_floor: 1 pair(s)
-fragmentation (recall floor):
+false merges (precision loss): 1 pair(s)
+fragmentation (recall loss):
   drive_x: split across 2 clusters
   share: split across 3 clusters
 ```

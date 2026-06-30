@@ -6,6 +6,25 @@ Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 
 현재 범위는 **Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority policy, std/library classifier는 아직 포함하지 않는다.
 
+## Requirements
+
+Python dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+System tools:
+
+- `radare2`: required only by `binary_extractor.py` and by the Python `r2pipe` backend
+- `nm`: required by `gt_extractor.py` and normally provided by GNU binutils
+
+Dependency scope:
+
+- `engine.py`, `scores.py`, and `run_case.py` over already generated JSON do not import `r2pipe` directly.
+- `binary_extractor.py --help` and unit tests can import the module without `r2pipe`.
+- actual binary extraction checks for the radare2 executable first, then imports the Python `r2pipe` package. Missing dependencies are reported as actionable CLI errors.
+
 ## Pipeline
 
 ```text
@@ -164,11 +183,10 @@ Rules:
 {
   "case": "fg01",
   "build": "O3S",
-  "schema_version": 1,
+  "schema_version": 2,
   "origins": [
     {
       "origin": "shared_recursive",
-      "type": "generic",
       "members": [
         "FUN_00113f00",
         "FUN_00113f80",
@@ -181,8 +199,8 @@ Rules:
 
 Rules:
 
-- origin object fields are exactly `origin`, `type`, `members`
-- `type` is one of `generic`, `concrete`
+- origin object fields are exactly `origin`, `members`
+- ground truth `schema_version` is currently `2`
 - each scored fixture node must appear in exactly one origin
 - ground truth universe must equal fixture nodes with `scored=true`
 - `case` and `build` must match the fixture
@@ -205,14 +223,11 @@ Current policy:
 - raw symbol address is converted to the fixture id format with `addr + 0x100000`, e.g. `0x13f00 -> FUN_00113f00`
 - same demangled origin name becomes one ground truth origin group
 - if multiple symbols resolve to the same address, the address/member is emitted once and the alias is recorded in top-level `note`
-- origin names matching `^(c_|decoy_)` are `concrete`
-- all other origins are `generic`
-- the extractor emits only `generic` and `concrete`
 
 Interpretation:
 
 - family membership is compiler-derived from non-stripped symbol addresses and demangled source paths
-- `generic`/`concrete` kind labels are author-defined naming conventions, not compiler facts
+- ground truth does not encode generic/concrete kind labels
 
 Example:
 
@@ -258,7 +273,7 @@ Example:
 Rules:
 
 - addresses are raw `.text` addresses from the non-stripped binary
-- the file contains no origin name, family/group label, or generic/concrete type
+- the file contains no origin name or family/group label
 - stripped and non-stripped artifacts are expected to preserve function start addresses
 - `binary_extractor.py` uses this file as an allow-list:
   - listed user address -> `type=user`, `scored=true`

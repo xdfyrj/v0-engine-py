@@ -28,27 +28,23 @@ def main() -> int:
         build="O3S",
         prefix="family_graph_02::",
         id_bias=0x100000,
-        concrete_regex=r"^(c_|decoy_)",
     )
 
     expected = {
         "case": "fg02",
         "build": "O3S",
-        "schema_version": 1,
+        "schema_version": 2,
         "origins": [
             {
                 "origin": "process_beta",
-                "type": "generic",
                 "members": ["FUN_00114000", "FUN_00114120"],
             },
             {
                 "origin": "c_process_alpha_i32",
-                "type": "concrete",
                 "members": ["FUN_00114af0"],
             },
             {
                 "origin": "decoy_alpha",
-                "type": "concrete",
                 "members": ["FUN_00114c10"],
             },
         ],

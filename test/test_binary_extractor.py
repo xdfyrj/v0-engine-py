@@ -4,6 +4,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import binary_extractor as binary_extractor_module
 from binary_extractor import (
     BinaryExtractor,
     R2Function,
@@ -18,6 +19,26 @@ class FakeR2:
 
     def cmdj(self, command):
         return self.responses[command]
+
+
+def check_missing_radare2_error() -> int:
+    original_which = binary_extractor_module.shutil.which
+    binary_extractor_module.shutil.which = lambda _name: None
+
+    try:
+        try:
+            binary_extractor_module.ensure_radare2_available()
+        except RuntimeError as exc:
+            message = str(exc)
+            if "radare2" not in message or "binary_extractor.py" not in message:
+                print(f"FAIL missing radare2 message is not actionable: {message}")
+                return 1
+            return 0
+
+        print("FAIL missing radare2 executable was not rejected")
+        return 1
+    finally:
+        binary_extractor_module.shutil.which = original_which
 
 
 def check_rust_startup_main_detection() -> int:
@@ -139,6 +160,9 @@ def check_user_address_policy() -> int:
 
 
 def main() -> int:
+    if check_missing_radare2_error() != 0:
+        return 1
+
     if check_rust_startup_main_detection() != 0:
         return 1
 

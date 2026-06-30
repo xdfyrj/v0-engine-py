@@ -110,7 +110,6 @@ def extract_ground_truth(
     prefix: str,
 ) -> dict:
     from gt_extractor import (
-        DEFAULT_CONCRETE_ORIGIN_REGEX,
         DEFAULT_ID_BIAS,
         make_ground_truth,
         make_users_json,
@@ -128,7 +127,6 @@ def extract_ground_truth(
         build=build,
         prefix=prefix,
         id_bias=DEFAULT_ID_BIAS,
-        concrete_regex=DEFAULT_CONCRETE_ORIGIN_REGEX,
     )
     write_json(gt, output_path)
     write_json(

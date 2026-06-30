@@ -7,7 +7,7 @@
 #
 # 규칙
 #   엔진은 origin 을 모른다. scorer 만 ground truth 를 본다.
-#   ground truth 는 "소스 사실"(origin, type)만 담는다.
+#   ground truth 는 origin partition 만 담는다.
 #   채점 유니버스 = fixture 의 scored 노드 == ground truth 의 전체 member.
 
 from __future__ import annotations
@@ -26,13 +26,12 @@ from paths import DEFAULT_BUILD, resolve_fixture_json, resolve_gt_json, split_ca
 
 # ---------------------------------------------------------- ground truth model
 
-ORIGIN_TYPES = {"generic", "concrete"}
+GROUND_TRUTH_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
 class OriginGroup:
     origin: str
-    type: str                        # generic | concrete
     members: tuple[str, ...]
 
 
@@ -45,9 +44,6 @@ class GroundTruth:
 
     def origin_of(self) -> dict[str, str]:
         return {m: g.origin for g in self.origins for m in g.members}
-
-    def type_of_origin(self) -> dict[str, str]:
-        return {g.origin: g.type for g in self.origins}
 
 
 # ---------------------------------------------------------- ground truth loader
@@ -63,7 +59,6 @@ def load_ground_truth(path: str) -> GroundTruth:
         origins=tuple(
             OriginGroup(
                 origin=o["origin"],
-                type=o["type"],
                 members=tuple(o["members"]),
             )
             for o in data["origins"]
@@ -82,7 +77,7 @@ def _validate_ground_truth(data) -> None:
         raise ValueError(f"missing field(s): {sorted(required - keys)}")
     if keys - allowed:
         raise ValueError(f"unknown field(s): {sorted(keys - allowed)}")
-    if data["schema_version"] != 1:
+    if data["schema_version"] != GROUND_TRUTH_SCHEMA_VERSION:
         raise ValueError(f"unsupported schema_version: {data['schema_version']}")
     if not isinstance(data["origins"], list) or not data["origins"]:
         raise ValueError("origins must be a non-empty list")
@@ -91,8 +86,8 @@ def _validate_ground_truth(data) -> None:
     seen_members: set[str] = set()
     for index, o in enumerate(data["origins"]):
         where = f"origins[{index}]"
-        if not isinstance(o, dict) or set(o) != {"origin", "type", "members"}:
-            raise ValueError(f"{where} must have exactly origin/type/members")
+        if not isinstance(o, dict) or set(o) != {"origin", "members"}:
+            raise ValueError(f"{where} must have exactly origin/members")
 
         name = o["origin"]
         if not isinstance(name, str) or not name.strip():
@@ -100,9 +95,6 @@ def _validate_ground_truth(data) -> None:
         if name in seen_origins:
             raise ValueError(f"duplicate origin name: {name}")
         seen_origins.add(name)
-
-        if o["type"] not in ORIGIN_TYPES:
-            raise ValueError(f"{name}.type must be one of {sorted(ORIGIN_TYPES)}")
 
         members = o["members"]
         if not isinstance(members, list) or not members:

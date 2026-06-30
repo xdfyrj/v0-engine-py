@@ -20,9 +20,9 @@ from paths import (
 )
 
 
-SCHEMA_VERSION = 1
+GT_SCHEMA_VERSION = 2
+USERS_SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
-DEFAULT_CONCRETE_ORIGIN_REGEX = r"^(c_|decoy_)"
 
 
 @dataclass(frozen=True)
@@ -111,16 +111,6 @@ def strip_rust_generic_args(name: str) -> str:
     return "".join(out)
 
 
-def origin_type(
-    origin: str,
-    *,
-    concrete_regex: re.Pattern[str],
-) -> str:
-    if concrete_regex.search(origin):
-        return "concrete"
-    return "generic"
-
-
 def make_ground_truth(
     *,
     symbols: list[Symbol],
@@ -128,10 +118,7 @@ def make_ground_truth(
     build: str,
     prefix: str,
     id_bias: int,
-    concrete_regex: str,
 ) -> dict[str, Any]:
-    concrete_pattern = re.compile(concrete_regex)
-
     members_by_origin: dict[str, dict[str, int]] = defaultdict(dict)
     owner_by_member: dict[str, str] = {}
     alias_notes: list[str] = []
@@ -172,10 +159,6 @@ def make_ground_truth(
         origins.append(
             {
                 "origin": origin,
-                "type": origin_type(
-                    origin,
-                    concrete_regex=concrete_pattern,
-                ),
                 "members": [member_id for member_id, _addr in sorted_members],
             }
         )
@@ -186,7 +169,7 @@ def make_ground_truth(
     gt: dict[str, Any] = {
         "case": case,
         "build": build,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": GT_SCHEMA_VERSION,
         "origins": origins,
     }
 
@@ -220,7 +203,7 @@ def make_users_json(
     return {
         "case": case,
         "build": build,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": USERS_SCHEMA_VERSION,
         "source": binary_path,
         "prefix": prefix,
         "addresses": [f"0x{addr:x}" for addr in addresses],
@@ -297,11 +280,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="value added to raw symbol addresses when formatting FUN_ ids",
     )
     parser.add_argument(
-        "--concrete-regex",
-        default=DEFAULT_CONCRETE_ORIGIN_REGEX,
-        help=f"origin regex classified as concrete. Default: {DEFAULT_CONCRETE_ORIGIN_REGEX!r}",
-    )
-    parser.add_argument(
         "--nm-tool",
         default="nm",
         help="nm-compatible symbol tool. Default: nm",
@@ -344,7 +322,6 @@ def main(argv: list[str] | None = None) -> int:
             build=build,
             prefix=prefix,
             id_bias=args.id_bias,
-            concrete_regex=args.concrete_regex,
         )
 
         if args.fixture:

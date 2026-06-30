@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from collections import Counter, deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import r2pipe
 
 from paths import (
     DEFAULT_BUILD,
@@ -22,6 +21,7 @@ from paths import (
 SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
 DEFAULT_CASE = "unknown"
+R2_EXECUTABLE = "radare2"
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,35 @@ class R2Function:
     name: str
     size: int
     kind: str
+
+
+def ensure_radare2_available() -> None:
+    if shutil.which(R2_EXECUTABLE):
+        return
+
+    raise RuntimeError(
+        f"{R2_EXECUTABLE} executable was not found. Install radare2 before running "
+        "binary_extractor.py."
+    )
+
+
+def open_r2(binary_path: str) -> Any:
+    ensure_radare2_available()
+
+    try:
+        import r2pipe
+    except ImportError as exc:
+        raise RuntimeError(
+            "Python package r2pipe is not installed. Install Python "
+            "dependencies with `python3 -m pip install -r requirements.txt`."
+        ) from exc
+
+    try:
+        return r2pipe.open(binary_path, flags=["-2"])
+    except Exception as exc:
+        raise RuntimeError(
+            f"failed to open {binary_path!r} with radare2/r2pipe: {exc}"
+        ) from exc
 
 
 def function_id(addr: int, *, id_bias: int = 0) -> str:
@@ -78,13 +107,16 @@ class BinaryExtractor:
         self.binary_path = binary_path
         self.include_imports = include_imports
         self.id_bias = id_bias
-        self.r2 = r2pipe.open(binary_path, flags=["-2"])
+        self.r2 = open_r2(binary_path)
         self.functions: list[R2Function] = []
         self.by_addr: dict[int, R2Function] = {}
         self._call_cache: dict[int, Counter[int]] = {}
 
     def close(self) -> None:
-        self.r2.quit()
+        try:
+            self.r2.quit()
+        except Exception:
+            pass
 
     def analyze(self) -> None:
         self.r2.cmd("aaa")
@@ -585,6 +617,9 @@ def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser
 
     if not Path(args.binary).exists():
         args.binary = fixture_binary_for(case, build)
+
+    if not Path(args.binary).exists():
+        parser.error(f"binary not found: {args.binary}")
 
     if args.case == DEFAULT_CASE:
         args.case = case
