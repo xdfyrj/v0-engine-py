@@ -1,0 +1,66 @@
+{
+  "case": "family_graph_03",
+  "build": "O3KS",
+  "schema_version": 1,
+  "origins": [
+    {
+      "origin": "share",
+      "type": "generic",
+      "members": [
+        "FUN_00114720",
+        "FUN_001148e0",
+        "FUN_00114a30"
+      ]
+    },
+    {
+      "origin": "leaf_p",
+      "type": "generic",
+      "members": [
+        "FUN_00114b20",
+        "FUN_00114d90",
+        "FUN_00114ef0"
+      ]
+    },
+    {
+      "origin": "leaf_q",
+      "type": "generic",
+      "members": [
+        "FUN_00115100",
+        "FUN_00115250",
+        "FUN_00115440"
+      ]
+    },
+    {
+      "origin": "decoy_a",
+      "type": "concrete",
+      "members": [
+        "FUN_00115680"
+      ]
+    },
+    {
+      "origin": "decoy_b",
+      "type": "concrete",
+      "members": [
+        "FUN_00115780"
+      ]
+    },
+    {
+      "origin": "drive_x",
+      "type": "generic",
+      "members": [
+        "FUN_00115900",
+        "FUN_00115b50",
+        "FUN_00115e10"
+      ]
+    },
+    {
+      "origin": "drive_y",
+      "type": "generic",
+      "members": [
+        "FUN_00115fa0",
+        "FUN_001162d0",
+        "FUN_00116530"
+      ]
+    }
+  ]
+}

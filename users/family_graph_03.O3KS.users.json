@@ -1,0 +1,26 @@
+{
+  "case": "family_graph_03",
+  "build": "O3KS",
+  "schema_version": 1,
+  "source": "gt_bin/family_graph_03K.gt.bin",
+  "prefix": "family_graph_03::",
+  "addresses": [
+    "0x14720",
+    "0x148e0",
+    "0x14a30",
+    "0x14b20",
+    "0x14d90",
+    "0x14ef0",
+    "0x15100",
+    "0x15250",
+    "0x15440",
+    "0x15680",
+    "0x15780",
+    "0x15900",
+    "0x15b50",
+    "0x15e10",
+    "0x15fa0",
+    "0x162d0",
+    "0x16530"
+  ]
+}

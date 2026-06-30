@@ -3,12 +3,11 @@
 #
 # 자동 채점기 (auto scorer)
 #   - 쌍별 precision / recall / F1 / ARI
-#   - floor 진단 (false merge 분류 + fragmentation)
+#   - false merge / fragmentation 진단
 #
 # 규칙
 #   엔진은 origin 을 모른다. scorer 만 ground truth 를 본다.
 #   ground truth 는 "소스 사실"(origin, type)만 담는다.
-#   floor 라벨은 scorer 가 클러스터 + origin + type 으로 도출한다.
 #   채점 유니버스 = fixture 의 scored 노드 == ground truth 의 전체 member.
 
 from __future__ import annotations
@@ -18,32 +17,16 @@ import json
 import sys
 from dataclasses import dataclass
 from itertools import combinations
-from pathlib import Path
 
 from engine import run_cg_wl
 from loader import load_case
 from model import Case
+from paths import DEFAULT_BUILD, resolve_fixture_json, resolve_gt_json, split_case_build
 
 
 # ---------------------------------------------------------- ground truth model
 
 ORIGIN_TYPES = {"generic", "concrete"}
-
-
-def case_stem(value: str) -> str:
-    name = Path(value).name
-    for suffix in (".fixture.json", ".gt.json", ".json"):
-        if name.endswith(suffix):
-            return name[:-len(suffix)]
-    return name
-
-
-def fixture_json_for(stem: str) -> str:
-    return f"fixtures/{stem}.fixture.json"
-
-
-def gt_json_for(stem: str) -> str:
-    return f"ground_truth/{stem}.gt.json"
 
 
 @dataclass(frozen=True)
@@ -152,7 +135,6 @@ class FalseMerge:
     b: str
     origin_a: str
     origin_b: str
-    floor: str
 
 
 @dataclass(frozen=True)
@@ -169,7 +151,6 @@ class ScoreReport:
     pairwise: PairwiseScore
     false_merges: tuple[FalseMerge, ...]
     missed_pairs: tuple[MissedPair, ...]
-    floor_summary: dict[str, int]            # floor label -> FP pair count
     fragmented_origins: dict[str, int]       # origin -> #clusters it is split across
 
 
@@ -183,7 +164,6 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
     result = run_cg_wl(case)
     cluster_of = result.cluster_id_by_node      # scored nodes only
     origin_of = gt.origin_of()
-    type_of_origin = gt.type_of_origin()
 
     scored_ids = sorted(cluster_of)
 
@@ -202,10 +182,6 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
             false_merges.append(FalseMerge(
                 a=a, b=b,
                 origin_a=origin_of[a], origin_b=origin_of[b],
-                floor=_floor_label(
-                    type_of_origin[origin_of[a]],
-                    type_of_origin[origin_of[b]],
-                ),
             ))
         elif (not pred_same) and true_same:
             fn += 1
@@ -214,10 +190,6 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
             tn += 1
 
     pairwise = _pairwise_score(tp, fp, fn, tn)
-
-    floor_summary: dict[str, int] = {}
-    for fm in false_merges:
-        floor_summary[fm.floor] = floor_summary.get(fm.floor, 0) + 1
 
     origin_clusters: dict[str, set[int]] = {}
     for nid, cid in cluster_of.items():
@@ -234,7 +206,6 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
         pairwise=pairwise,
         false_merges=tuple(false_merges),
         missed_pairs=tuple(missed_pairs),
-        floor_summary=floor_summary,
         fragmented_origins=fragmented,
     )
 
@@ -267,12 +238,6 @@ def _adjusted_rand_index(tp: int, fp: int, fn: int, tn: int) -> float:
     return (index - expected) / (maximum - expected)
 
 
-def _floor_label(type_a: str, type_b: str) -> str:
-    if "concrete" in {type_a, type_b}:
-        return "concrete_mirror_floor"
-    return "relation_indistinguishable"
-
-
 def _check_join(case: Case, gt: GroundTruth) -> None:
     if case.case != gt.case or case.build != gt.build:
         raise ValueError(
@@ -298,12 +263,10 @@ def format_report(r: ScoreReport) -> str:
         f"P={p.precision:.2f}  R={p.recall:.2f}  F1={p.f1:.2f}  ARI={p.ari:.2f}",
         f"TP={p.tp} FP={p.fp} FN={p.fn} TN={p.tn}",
     ]
-    if r.floor_summary:
-        lines.append("false merges (precision floor):")
-        for floor, n in sorted(r.floor_summary.items()):
-            lines.append(f"  {floor}: {n} pair(s)")
+    if r.false_merges:
+        lines.append(f"false merges (precision loss): {len(r.false_merges)} pair(s)")
     if r.fragmented_origins:
-        lines.append("fragmentation (recall floor):")
+        lines.append("fragmentation (recall loss):")
         for origin, k in sorted(r.fragmented_origins.items()):
             lines.append(f"  {origin}: split across {k} clusters")
     return "\n".join(lines)
@@ -322,6 +285,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="ground-truth JSON path",
     )
+    parser.add_argument("--build", help=f"build/profile. Default: {DEFAULT_BUILD}")
     return parser
 
 
@@ -330,9 +294,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.ground_truth is None:
-        stem = case_stem(args.fixture)
-        fixture_path = fixture_json_for(stem)
-        gt_path = gt_json_for(stem)
+        case, build = split_case_build(args.fixture, args.build)
+        fixture_path = resolve_fixture_json(case, build)
+        gt_path = resolve_gt_json(case, build)
     else:
         fixture_path = args.fixture
         gt_path = args.ground_truth

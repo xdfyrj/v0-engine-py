@@ -15,13 +15,23 @@ fixtures/*.fixture.json
   -> predicted clusters
   -> scores.py
   <- ground_truth/*.gt.json
-  -> P / R / F1 / ARI + floor diagnostics
+  -> P / R / F1 / ARI + false-merge / fragmentation diagnostics
+
+gt_bin/*.gt.bin
+  -> gt_extractor.py
+  -> ground_truth/*.gt.json
+  -> users/*.users.json
+
+bin/*.bin
+  -> binary_extractor.py + users/*.users.json
+  -> fixtures/*.fixture.json
 ```
 
 중요한 분리:
 
 - `fixtures/`: engine 입력. 함수 ID, node type, scored 여부, call edge만 담는다. 정답 origin은 절대 넣지 않는다.
 - `ground_truth/`: scorer 입력. origin partition과 origin type만 담는다.
+- `users/`: non-stripped symbol side에서 뽑은 user function raw address set. origin/group 정보는 담지 않는다.
 - `engine.py`: ground truth를 보지 않는다.
 
 ## Files
@@ -36,9 +46,73 @@ scores.py             ground truth loader + pairwise scorer + CLI
 run_case.py           stem-based end-to-end pipeline runner
 fixtures/             함수 관계 입력 JSON
 ground_truth/         origin label 정답 JSON
+users/                user function raw address JSON
 test/test_engine.py   neighbor color multiset aggregation regression
+test/test_binary_extractor.py startup, tail-call, user address regression
+test/test_gt_extractor.py compiler symbol GT and user address regression
 test/test_scores.py   fg01/fg02/fg03K/fg03 metric regression
 ```
+
+## Binary Provenance
+
+The binaries under `bin/` and `gt_bin/` were built from the companion Rust
+artifact repository:
+
+- source repository: https://github.com/xdfyrj/rust-loss
+- source cases: `rust-loss/examples/family_graph_01.rs`,
+  `family_graph_02.rs`, `family_graph_03.rs`
+- build scripts: `rust-loss/scripts/build_case.sh` and
+  `rust-loss/scripts/lib_build.sh`
+
+The `rust-loss` scripts call `rustc` directly, not Cargo, so compiler flags and
+artifact profiles are explicit. The authoritative per-binary metadata is in
+`rust-loss/artifacts/<profile>/<case>/build_info.txt`.
+
+Observed build environment:
+
+```text
+OS/kernel: Linux XDFYRJ 6.6.114.1-microsoft-standard-WSL2 x86_64
+target/host: x86_64-unknown-linux-gnu
+rustc: rustc 1.93.1 (01f6ddf75 2026-02-11)
+LLVM: 21.1.8
+cargo: 1.93.1 (not used for artifact builds)
+binutils: GNU strip/objdump/nm 2.42
+```
+
+Build profiles relevant to this repository:
+
+```text
+O3:
+  non-stripped optimized mapping / symbol source
+  flags: -C opt-level=3 -C codegen-units=1 -C lto=off -C panic=unwind
+         -C debuginfo=0 -C debug-assertions=off -C overflow-checks=off
+
+O3S:
+  stripped evaluation binary derived from O3 with strip --strip-all
+
+O3K:
+  non-stripped optimized control build with --cfg keep
+  flags: O3 flags + --cfg keep
+
+O3KS:
+  stripped evaluation binary derived from O3K with strip --strip-all
+```
+
+In this repository, `gt_bin/*.gt.bin` is the non-stripped symbol-bearing side
+used by `gt_extractor.py`, while `bin/*.bin` is the stripped evaluation side
+used by `binary_extractor.py`.
+
+Canonical commands separate source case from build/profile:
+
+```text
+case  = family_graph_03
+build = O3S | O3KS
+```
+
+The old `family_graph_03K` input binary name is retained only as a compatibility
+fallback for the O3KS artifact. Canonical generated JSON uses
+`family_graph_03.O3KS.*`, and the Rust crate symbol prefix remains
+`family_graph_03::`.
 
 ## Fixture JSON
 
@@ -115,7 +189,12 @@ Rules:
 
 ## Ground Truth Extractor Draft
 
-`gt_extractor.py`는 non-stripped Rust binary의 demangled symbol table에서 `ground_truth/*.gt.json`를 생성한다.
+`gt_extractor.py`는 non-stripped Rust binary의 demangled symbol table에서 두 파일을 생성한다.
+
+```text
+ground_truth/<case>.<build>.gt.json
+users/<case>.<build>.users.json
+```
 
 Current policy:
 
@@ -138,40 +217,92 @@ Interpretation:
 Example:
 
 ```bash
-python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/fg01_auto.gt.json
+python3 gt_extractor.py family_graph_01
 ```
 
-For freeze/regression generation, pass the matching fixture as a validation guard:
+Equivalent explicit input/output form:
 
 ```bash
-python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/fg01_auto.gt.json \
-  --fixture fixtures/fg01.fixture.json
+python3 gt_extractor.py gt_bin/family_graph_01.gt.bin ground_truth/family_graph_01.O3S.gt.json \
+  --build O3S \
+  --users users/family_graph_01.O3S.users.json
 ```
 
-For `family_graph_03K.gt.bin`, pass `--prefix family_graph_03::` if the crate
-symbol prefix differs from the binary stem.
+For the O3KS control build, use the source case plus build:
 
-## Stem Convention
+```bash
+python3 gt_extractor.py family_graph_03 --build O3KS
+```
 
-The convenient commands use a single example stem, such as `family_graph_03`.
-This is not a case table. The tools only expand the stem into paths by a fixed
-file naming convention.
+## User Address Sidecar
+
+`users/*.users.json` is the bridge from non-stripped symbols to
+stripped fixture extraction.
+
+Example:
+
+```json
+{
+  "case": "family_graph_03",
+  "build": "O3S",
+  "schema_version": 1,
+  "source": "gt_bin/family_graph_03.gt.bin",
+  "prefix": "family_graph_03::",
+  "addresses": [
+    "0x14080",
+    "0x140e0"
+  ]
+}
+```
+
+Rules:
+
+- addresses are raw `.text` addresses from the non-stripped binary
+- the file contains no origin name, family/group label, or generic/concrete type
+- stripped and non-stripped artifacts are expected to preserve function start addresses
+- `binary_extractor.py` uses this file as an allow-list:
+  - listed user address -> `type=user`, `scored=true`
+  - direct callee of a listed user function -> `type=anchor`, `scored=false`
+  - root main -> `type=anchor`, `scored=false`
+- library/runtime internals beyond those one-hop anchors are not chased
+
+This keeps the normal family_graph pipeline free of case-specific depth limits
+or regex-based function removal.
+
+## Case/Build Convention
+
+The convenient commands take a source case and an optional build/profile.
+If `--build` is omitted, it defaults to `O3S`.
 
 Naming rules:
 
-- stripped/fixture binary: `bin/<stem>.fixture.bin`, falling back to `bin/<stem>.bin`
-- non-stripped GT binary: `gt_bin/<stem>.gt.bin`
-- generated fixture JSON: `fixtures/<stem>.fixture.json`
-- generated ground truth JSON: `ground_truth/<stem>.gt.json`
+- stripped/fixture binary: `bin/<case>.<build>.fixture.bin`, falling back to `bin/<case>.<build>.bin`
+- non-stripped GT binary: `gt_bin/<case>.<build>.gt.bin`
+- generated fixture JSON: `fixtures/<case>.<build>.fixture.json`
+- generated ground truth JSON: `ground_truth/<case>.<build>.gt.json`
+- generated user address JSON: `users/<case>.<build>.users.json`
+
+Compatibility fallback for current checked-in binaries:
+
+- `build=O3S` may read `bin/<case>.bin` and `gt_bin/<case>.gt.bin`
+- `build=O3KS` may read `bin/<case>K.bin` and `gt_bin/<case>K.gt.bin`
 
 Example:
 
 ```text
-family_graph_03
+family_graph_03 --build O3S
   -> bin/family_graph_03.bin
   -> gt_bin/family_graph_03.gt.bin
-  -> fixtures/family_graph_03.fixture.json
-  -> ground_truth/family_graph_03.gt.json
+  -> fixtures/family_graph_03.O3S.fixture.json
+  -> ground_truth/family_graph_03.O3S.gt.json
+  -> users/family_graph_03.O3S.users.json
+
+family_graph_03 --build O3KS
+  -> bin/family_graph_03K.bin
+  -> gt_bin/family_graph_03K.gt.bin
+  -> fixtures/family_graph_03.O3KS.fixture.json
+  -> ground_truth/family_graph_03.O3KS.gt.json
+  -> users/family_graph_03.O3KS.users.json
 ```
 
 ## Call-Graph Weisfeiler-Lehman
@@ -249,8 +380,7 @@ Metrics:
 
 Diagnostics:
 
-- `concrete_mirror_floor`: false merge involving a concrete origin
-- `relation_indistinguishable`: other false merge
+- false merge count: different origins placed in the same predicted cluster
 - `fragmented_origins`: same origin split across multiple predicted clusters
 
 ## Binary Extractor Draft
@@ -260,12 +390,16 @@ Diagnostics:
 It is intentionally shallow:
 
 - function boundary discovery is delegated to radare2
-- std/runtime/library classification is not implemented in this project
+- user/library classification is not inferred from stripped code
+- user functions are supplied as raw addresses from `users/*.users.json`
+- in user-address mode, anchor context is intentionally one-hop:
+  direct callees of listed user functions only
 - Rust root auto-detection follows the known Rust/glibc startup pattern:
   `entry0 -> __libc_start_main(wrapper) -> wrapper -> lang_start_internal(real_main, ...)`
 - edges to functions omitted from output are dropped
 - root is emitted as `anchor/scored=false` by default
-- all other emitted reachable functions are `user/scored=true`
+- with a user address file, only listed user nodes are `user/scored=true`
+- direct non-user callees of listed user nodes are `anchor/scored=false`
 - output IDs use `FUN_001...` style by default via `--id-bias 0x100000`
 - direct `call` edges and tail-call-like unconditional `jmp` edges are counted
 
@@ -279,13 +413,16 @@ Tail-call rule:
 Recommended workflow:
 
 ```bash
-python3 binary_extractor.py family_graph_03 --max-depth 3
+python3 gt_extractor.py family_graph_03
+python3 binary_extractor.py family_graph_03
 ```
 
 Equivalent explicit input/output form:
 
 ```bash
-python3 binary_extractor.py bin/family_graph_03.bin fixtures/family_graph_03.fixture.json --max-depth 3
+python3 binary_extractor.py bin/family_graph_03.bin fixtures/family_graph_03.O3S.fixture.json \
+  --build O3S \
+  --users users/family_graph_03.O3S.users.json
 ```
 
 If auto-detection fails, inspect radare2 functions and pass `--root` manually:
@@ -300,18 +437,15 @@ Notes:
 - for this corpus, the wrapper often is not a radare2 function; the extractor disassembles it linearly, recovers the main-pointer loaded for the `lang_start_internal` call, and defines the real Rust main with `af @ <addr>`
 - this is an explicit Rust/glibc toolchain-pattern assumption for the controlled corpus, not general indirect-dispatch recovery
 - `--root` accepts radare2 name, raw address, raw `FUN_000...` id, or biased `FUN_001...` id.
-- `--max-depth` controls BFS depth from root; omit it for full reachable closure.
-- `--exclude-regex` may be passed multiple times to drop non-root functions by id/name/address.
+- if `users/<case>.<build>.users.json` exists, the shortcut loads it automatically.
 - `--id-bias 0` emits raw radare2-style IDs.
-- For primary evaluation, avoid case-specific `--exclude-regex` filtering unless it is explicitly documented as manual candidate selection.
-- For this research, std/library separation is treated as an external preprocessing assumption, not as a core contribution of the grouping method. If a fixture depends on manual candidate selection, record that as a limitation instead of treating it as blind extraction.
 
 ## Commands
 
 Run the engine on one fixture:
 
 ```bash
-python3 engine.py fixtures/family_graph_03.fixture.json
+python3 engine.py fixtures/family_graph_03.O3S.fixture.json
 ```
 
 Expected fg01 output:
@@ -321,23 +455,26 @@ Expected fg01 output:
 [['FUN_00113e20', 'FUN_00113f00', 'FUN_00113f80'], ['FUN_00114460', 'FUN_00114640', 'FUN_00114880']]
 ```
 
-Stem shortcut:
+Case/build shortcut:
 
 ```bash
 python3 engine.py family_graph_03
+python3 engine.py family_graph_03 --build O3KS
 ```
 
 Run the full pipeline for one stem:
 
 ```bash
-python3 run_case.py family_graph_03 --max-depth 3
+python3 run_case.py family_graph_03
+python3 run_case.py family_graph_03 --build O3KS
 ```
 
 This executes:
 
 ```text
-binary_extractor.py -> fixtures/family_graph_03.fixture.json
-gt_extractor.py     -> ground_truth/family_graph_03.gt.json
+gt_extractor.py     -> ground_truth/family_graph_03.O3S.gt.json
+gt_extractor.py     -> users/family_graph_03.O3S.users.json
+binary_extractor.py -> fixtures/family_graph_03.O3S.fixture.json
 engine.py CG-WL     -> predicted clusters
 scores.py           -> P/R/F1/ARI report
 ```
@@ -345,22 +482,23 @@ scores.py           -> P/R/F1/ARI report
 Regenerate the current family_graph stems:
 
 ```bash
-python3 run_case.py family_graph_01 --max-depth 2
-python3 run_case.py family_graph_02 --max-depth 2 --exclude-regex FUN_0014d6b3
-python3 run_case.py family_graph_03K --max-depth 3
-python3 run_case.py family_graph_03 --max-depth 3
+python3 run_case.py family_graph_01
+python3 run_case.py family_graph_02
+python3 run_case.py family_graph_03
+python3 run_case.py family_graph_03 --build O3KS
 ```
 
 Score one case:
 
 ```bash
-python3 scores.py fixtures/family_graph_03.fixture.json ground_truth/family_graph_03.gt.json
+python3 scores.py fixtures/family_graph_03.O3S.fixture.json ground_truth/family_graph_03.O3S.gt.json
 ```
 
-Stem shortcut:
+Case/build shortcut:
 
 ```bash
 python3 scores.py family_graph_03
+python3 scores.py family_graph_03 --build O3KS
 ```
 
 Extract compiler-derived ground truth:
@@ -372,7 +510,15 @@ python3 gt_extractor.py family_graph_03
 Equivalent explicit input/output form:
 
 ```bash
-python3 gt_extractor.py gt_bin/family_graph_03.gt.bin ground_truth/family_graph_03.gt.json
+python3 gt_extractor.py gt_bin/family_graph_03.gt.bin ground_truth/family_graph_03.O3S.gt.json \
+  --build O3S \
+  --users users/family_graph_03.O3S.users.json
+```
+
+Extract fixture JSON from stripped binary using the user address sidecar:
+
+```bash
+python3 binary_extractor.py family_graph_03
 ```
 
 Run regression tests:
@@ -388,28 +534,41 @@ python3 -m py_compile binary_extractor.py gt_extractor.py model.py loader.py eng
 Current score regression targets:
 
 ```text
-fg01 O3S   P=1.00 R=1.00 F1=1.00 ARI=1.00
-fg02 O3S   P=0.29 R=1.00 F1=0.44 ARI=0.39
-fg03 O3KS  P=0.94 R=1.00 F1=0.97 ARI=0.96
-fg03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
+family_graph_01 O3S   P=1.00 R=1.00 F1=1.00 ARI=1.00
+family_graph_02 O3S   P=0.29 R=1.00 F1=0.44 ARI=0.39
+family_graph_03 O3KS  P=0.94 R=1.00 F1=0.97 ARI=0.96
+family_graph_03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
 ```
 
 ## Current Data
 
 ```text
-fixtures/fg01.fixture.json        ground_truth/fg01_auto.gt.json
-fixtures/fg02.fixture.json        ground_truth/fg02_auto.gt.json
-fixtures/fg03K.fixture.json       ground_truth/fg03K_auto.gt.json
-fixtures/fg03.fixture.json        ground_truth/fg03_auto.gt.json
+fixtures/family_graph_01.O3S.fixture.json
+fixtures/family_graph_02.O3S.fixture.json
+fixtures/family_graph_03.O3KS.fixture.json
+fixtures/family_graph_03.O3S.fixture.json
+
+ground_truth/family_graph_01.O3S.gt.json
+ground_truth/family_graph_02.O3S.gt.json
+ground_truth/family_graph_03.O3KS.gt.json
+ground_truth/family_graph_03.O3S.gt.json
+
+users/family_graph_01.O3S.users.json
+users/family_graph_02.O3S.users.json
+users/family_graph_03.O3KS.users.json
+users/family_graph_03.O3S.users.json
 ```
 
-The non-`_auto` ground truth files are retained as hand-written references.
-Regression scoring uses the compiler-derived `_auto` files.
+Regression scoring uses the compiler-derived `ground_truth/family_graph_*.<build>.gt.json`
+files and the corresponding automatically extracted fixtures.
+Legacy `fg*` fixtures and ground-truth files may remain in the repository for
+comparison, but the active workflow uses `case + build`, e.g.
+`family_graph_03 --build O3KS`.
 
 Naming:
 
-- `fg03K` means the keep/out-of-line control build, stored as build `O3KS`
-- `fg03` means natural O3 stripped build, stored as build `O3S`
+- `case=family_graph_03, build=O3KS` means the keep/out-of-line control build
+- `case=family_graph_03, build=O3S` means the natural O3 stripped build
 
 ## Research Notes
 
@@ -417,8 +576,8 @@ This implementation follows the current research decision:
 
 - grouping is relation-only Axis 1
 - Axis 2 is type memo/corroboration only
-- Axis 3 is inlining/floor characterization
+- Axis 3 is inlining / recall-loss characterization
 - Axis 4 is ablation only
 - feature input and ground truth must remain physically separated
 
-The prototype is intentionally narrow: it validates whether CG-WL over hand-prepared function relation JSON reproduces the current fg01/fg02/fg03 claims.
+The prototype is intentionally narrow: it validates whether CG-WL over extracted family_graph function relation JSON reproduces the current fg01/fg02/fg03 claims.

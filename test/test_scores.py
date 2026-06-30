@@ -3,10 +3,10 @@
 # baseline 회귀: 네 사례의 (P, R, F1, ARI)가 compiler-derived auto-GT
 # 기준으로 고정되는지 확인한다.
 # 기준값:
-#   fg01        P=1.00 R=1.00 F1=1.00 ARI=1.00
-#   fg02        P=0.29 R=1.00 F1=0.44 ARI=0.39
-#   fg03 O3KS   P=0.94 R=1.00 F1=0.97 ARI=0.96
-#   fg03 O3S    P=0.80 R=0.40 F1=0.53 ARI=0.49
+#   family_graph_01 O3S   P=1.00 R=1.00 F1=1.00 ARI=1.00
+#   family_graph_02 O3S   P=0.29 R=1.00 F1=0.44 ARI=0.39
+#   family_graph_03 O3KS  P=0.94 R=1.00 F1=0.97 ARI=0.96
+#   family_graph_03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
 
 import os
 import sys
@@ -16,10 +16,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scores import score_case
 
 CASES = [
-    ("fixtures/fg01.fixture.json",  "ground_truth/fg01_auto.gt.json",  (1.00, 1.00, 1.00, 1.00)),
-    ("fixtures/fg02.fixture.json",  "ground_truth/fg02_auto.gt.json",  (0.29, 1.00, 0.44, 0.39)),
-    ("fixtures/fg03K.fixture.json", "ground_truth/fg03K_auto.gt.json", (0.94, 1.00, 0.97, 0.96)),
-    ("fixtures/fg03.fixture.json",  "ground_truth/fg03_auto.gt.json",  (0.80, 0.40, 0.53, 0.49)),
+    ("fixtures/family_graph_01.O3S.fixture.json",  "ground_truth/family_graph_01.O3S.gt.json",  (1.00, 1.00, 1.00, 1.00)),
+    ("fixtures/family_graph_02.O3S.fixture.json",  "ground_truth/family_graph_02.O3S.gt.json",  (0.29, 1.00, 0.44, 0.39)),
+    ("fixtures/family_graph_03.O3KS.fixture.json", "ground_truth/family_graph_03.O3KS.gt.json", (0.94, 1.00, 0.97, 0.96)),
+    ("fixtures/family_graph_03.O3S.fixture.json",  "ground_truth/family_graph_03.O3S.gt.json",  (0.80, 0.40, 0.53, 0.49)),
 ]
 
 

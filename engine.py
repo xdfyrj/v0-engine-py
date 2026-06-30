@@ -6,10 +6,10 @@ import argparse
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
 
 from loader import load_case
 from model import Case, Node
+from paths import DEFAULT_BUILD, resolve_fixture_json, split_case_build
 
 
 NodeId = str
@@ -24,18 +24,6 @@ RelationSignature = tuple[
     tuple[WeightedNeighborColor, ...],  # OUT multiset
     tuple[WeightedNeighborColor, ...],  # IN multiset
 ]
-
-
-def case_stem(value: str) -> str:
-    name = Path(value).name
-    for suffix in (".fixture.json", ".json"):
-        if name.endswith(suffix):
-            return name[:-len(suffix)]
-    return name
-
-
-def fixture_json_for(stem: str) -> str:
-    return f"fixtures/{stem}.fixture.json"
 
 
 @dataclass(frozen=True)
@@ -314,17 +302,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Run CG-WL on one fixture JSON."
     )
     parser.add_argument("fixture", help="fixture JSON path, or an example stem")
+    parser.add_argument("--build", help=f"build/profile. Default: {DEFAULT_BUILD}")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-    fixture_path = (
-        args.fixture
-        if args.fixture.endswith(".json") or Path(args.fixture).exists()
-        else fixture_json_for(case_stem(args.fixture))
-    )
+    if args.fixture.endswith(".json"):
+        fixture_path = args.fixture
+    else:
+        case, build = split_case_build(args.fixture, args.build)
+        fixture_path = resolve_fixture_json(case, build)
 
     try:
         result = run_fixture_path(fixture_path)

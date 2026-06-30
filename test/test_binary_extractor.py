@@ -1,9 +1,15 @@
 import os
 import sys
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from binary_extractor import BinaryExtractor, R2Function
+from binary_extractor import (
+    BinaryExtractor,
+    R2Function,
+    make_fixture_json,
+    select_user_context,
+)
 
 
 class FakeR2:
@@ -60,8 +66,83 @@ def check_rust_startup_main_detection() -> int:
     return 0
 
 
+def check_user_address_policy() -> int:
+    functions = {
+        0x1000: R2Function(addr=0x1000, name="real_main", size=0x40, kind="fcn"),
+        0x2000: R2Function(addr=0x2000, name="user_fn", size=0x20, kind="fcn"),
+        0x3000: R2Function(addr=0x3000, name="library_fn", size=0x20, kind="fcn"),
+        0x4000: R2Function(addr=0x4000, name="library_internal", size=0x20, kind="fcn"),
+    }
+    graph = {
+        0x1000: Counter({0x2000: 1, 0x3000: 1}),
+        0x2000: Counter({0x3000: 2}),
+        0x3000: Counter({0x4000: 1}),
+        0x4000: Counter(),
+    }
+    selected = select_user_context(
+        graph,
+        root_addr=0x1000,
+        user_addrs={0x2000},
+        allowed_addrs=set(functions),
+        score_root=False,
+    )
+    if selected != {0x1000, 0x2000, 0x3000}:
+        print(
+            "FAIL user context should include root, users, and direct "
+            f"user callees only, got {sorted(selected)}"
+        )
+        return 1
+
+    fixture = make_fixture_json(
+        case="fg-test",
+        build="O3S",
+        binary_path="bin/test.bin",
+        root=functions[0x1000],
+        functions=functions,
+        graph=graph,
+        selected=selected,
+        score_root=False,
+        user_addrs={0x2000},
+        users_path="users/test.users.json",
+        id_bias=0x100000,
+    )
+
+    nodes = {node["id"]: node for node in fixture["nodes"]}
+    expected_types = {
+        "FUN_00101000": ("anchor", False),
+        "FUN_00102000": ("user", True),
+        "FUN_00103000": ("anchor", False),
+    }
+    actual_types = {
+        node_id: (node["type"], node["scored"])
+        for node_id, node in nodes.items()
+    }
+    if actual_types != expected_types:
+        print(f"FAIL expected user policy {expected_types}, got {actual_types}")
+        return 1
+
+    expected_user_calls = [{"target": "FUN_00103000", "count": 2}]
+    if nodes["FUN_00102000"]["calls"] != expected_user_calls:
+        print(
+            "FAIL listed user node should retain edges to emitted "
+            f"anchors, got {nodes['FUN_00102000']['calls']}"
+        )
+        return 1
+    if nodes["FUN_00103000"]["calls"] != []:
+        print(
+            "FAIL one-hop library anchor should not retain edges to transitive "
+            f"library internals, got {nodes['FUN_00103000']['calls']}"
+        )
+        return 1
+
+    return 0
+
+
 def main() -> int:
     if check_rust_startup_main_detection() != 0:
+        return 1
+
+    if check_user_address_policy() != 0:
         return 1
 
     extractor = BinaryExtractor.__new__(BinaryExtractor)

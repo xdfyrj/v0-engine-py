@@ -3,7 +3,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gt_extractor import make_ground_truth, parse_nm_lines
+from gt_extractor import (
+    make_ground_truth,
+    make_users_json,
+    parse_nm_lines,
+    user_addresses,
+)
 
 
 def main() -> int:
@@ -56,6 +61,31 @@ def main() -> int:
 
     if gt != expected:
         print(f"FAIL expected {expected}, got {gt}")
+        return 1
+
+    addresses = user_addresses(symbols=symbols, prefix="family_graph_02::")
+    expected_addresses = [0x14000, 0x14120, 0x14AF0, 0x14C10]
+    if addresses != expected_addresses:
+        print(f"FAIL expected user addresses {expected_addresses}, got {addresses}")
+        return 1
+
+    users_json = make_users_json(
+        addresses=addresses,
+        case="fg02",
+        build="O3S",
+        binary_path="gt_bin/family_graph_02.gt.bin",
+        prefix="family_graph_02::",
+    )
+    expected_users_json = {
+        "case": "fg02",
+        "build": "O3S",
+        "schema_version": 1,
+        "source": "gt_bin/family_graph_02.gt.bin",
+        "prefix": "family_graph_02::",
+        "addresses": ["0x14000", "0x14120", "0x14af0", "0x14c10"],
+    }
+    if users_json != expected_users_json:
+        print(f"FAIL expected users JSON {expected_users_json}, got {users_json}")
         return 1
 
     print("ground truth extractor symbol grouping PASS")

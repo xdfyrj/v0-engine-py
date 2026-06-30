@@ -1,0 +1,25 @@
+{
+  "case": "family_graph_01",
+  "build": "O3S",
+  "schema_version": 1,
+  "origins": [
+    {
+      "origin": "shared_recursive",
+      "type": "generic",
+      "members": [
+        "FUN_00113e20",
+        "FUN_00113f00",
+        "FUN_00113f80"
+      ]
+    },
+    {
+      "origin": "process",
+      "type": "generic",
+      "members": [
+        "FUN_00114460",
+        "FUN_00114640",
+        "FUN_00114880"
+      ]
+    }
+  ]
+}

@@ -10,11 +10,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from paths import (
+    DEFAULT_BUILD,
+    gt_binary_for,
+    gt_json_for,
+    prefix_for_case,
+    split_case_build,
+    users_json_for,
+)
+
 
 SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
-DEFAULT_CONCRETE_REGEX = r"^(c_|decoy_)"
-DEFAULT_BUILD = "unknown"
+DEFAULT_CONCRETE_ORIGIN_REGEX = r"^(c_|decoy_)"
 
 
 @dataclass(frozen=True)
@@ -30,27 +38,6 @@ def function_id(addr: int, *, id_bias: int = DEFAULT_ID_BIAS) -> str:
 
 def parse_int(value: str) -> int:
     return int(value, 0)
-
-
-def case_stem(value: str) -> str:
-    name = Path(value).name
-    for suffix in (".gt.bin", ".gt.json", ".bin", ".json"):
-        if name.endswith(suffix):
-            return name[:-len(suffix)]
-    return name
-
-
-def gt_binary_for(stem: str) -> str:
-    return f"gt_bin/{stem}.gt.bin"
-
-
-def gt_json_for(stem: str) -> str:
-    return f"ground_truth/{stem}.gt.json"
-
-
-def prefix_for(stem: str) -> str:
-    crate = re.sub(r"^(family_graph_\d+)K$", r"\1", stem)
-    return f"{crate}::"
 
 
 def run_nm(binary_path: str, nm_tool: str) -> list[str]:
@@ -209,6 +196,37 @@ def make_ground_truth(
     return gt
 
 
+def user_addresses(
+    *,
+    symbols: list[Symbol],
+    prefix: str,
+) -> list[int]:
+    addresses = {
+        symbol.addr
+        for symbol in symbols
+        if origin_from_symbol(symbol.name, prefix) is not None
+    }
+    return sorted(addresses)
+
+
+def make_users_json(
+    *,
+    addresses: list[int],
+    case: str,
+    build: str,
+    binary_path: str,
+    prefix: str,
+) -> dict[str, Any]:
+    return {
+        "case": case,
+        "build": build,
+        "schema_version": SCHEMA_VERSION,
+        "source": binary_path,
+        "prefix": prefix,
+        "addresses": [f"0x{addr:x}" for addr in addresses],
+    }
+
+
 def validate_against_fixture(gt: dict[str, Any], fixture_path: str) -> None:
     from loader import load_case
 
@@ -247,12 +265,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "output",
         nargs="?",
-        help="output path. If omitted, writes JSON to stdout.",
+        help="output path. If omitted, writes ground_truth/<case>.<build>.gt.json.",
     )
     parser.add_argument("--case", help="case field written into generated JSON")
     parser.add_argument(
         "--build",
-        default=DEFAULT_BUILD,
         help=f"build field written into generated JSON. Default: {DEFAULT_BUILD}",
     )
     parser.add_argument(
@@ -272,6 +289,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--fixture",
         help="optional fixture JSON used to validate the scored node universe",
     )
+    parser.add_argument("--users", help="output path for user address JSON")
     parser.add_argument(
         "--id-bias",
         type=parse_int,
@@ -280,8 +298,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--concrete-regex",
-        default=DEFAULT_CONCRETE_REGEX,
-        help=f"origin regex classified as concrete. Default: {DEFAULT_CONCRETE_REGEX!r}",
+        default=DEFAULT_CONCRETE_ORIGIN_REGEX,
+        help=f"origin regex classified as concrete. Default: {DEFAULT_CONCRETE_ORIGIN_REGEX!r}",
     )
     parser.add_argument(
         "--nm-tool",
@@ -296,13 +314,15 @@ def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser
         parser.error("use either positional output or --output, not both")
 
     args.output = args.output_option or args.output
-    stem = case_stem(args.binary)
+    case, build = split_case_build(args.binary, args.build)
 
     if not Path(args.binary).exists():
-        args.binary = gt_binary_for(stem)
-    args.output = args.output or gt_json_for(stem)
-    args.case = args.case or stem
-    args.prefix = args.prefix or prefix_for(stem)
+        args.binary = gt_binary_for(case, build)
+    args.output = args.output or gt_json_for(case, build)
+    args.users = args.users or users_json_for(case, build)
+    args.case = args.case or case
+    args.build = build
+    args.prefix = args.prefix or prefix_for_case(args.case)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -317,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         build = args.build
 
         symbols = parse_nm_lines(run_nm(args.binary, args.nm_tool))
+        user_addrs = user_addresses(symbols=symbols, prefix=prefix)
         gt = make_ground_truth(
             symbols=symbols,
             case=case,
@@ -335,6 +356,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"origins={len(gt['origins'])}")
         else:
             print(json.dumps(gt, indent=2))
+
+        if args.users:
+            users_json = make_users_json(
+                addresses=user_addrs,
+                case=case,
+                build=build,
+                binary_path=args.binary,
+                prefix=prefix,
+            )
+            write_json(users_json, args.users)
+            print(f"wrote {args.users}")
+            print(f"users={len(user_addrs)}")
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

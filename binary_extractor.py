@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from collections import Counter, deque
 from dataclasses import dataclass
@@ -11,11 +10,18 @@ from typing import Any
 
 import r2pipe
 
+from paths import (
+    DEFAULT_BUILD,
+    fixture_binary_for,
+    fixture_json_for,
+    resolve_users_json,
+    split_case_build,
+)
+
 
 SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
 DEFAULT_CASE = "unknown"
-DEFAULT_BUILD = "unknown"
 
 
 @dataclass(frozen=True)
@@ -34,27 +40,27 @@ def parse_int(value: str) -> int:
     return int(value, 0)
 
 
-def case_stem(value: str) -> str:
-    name = Path(value).name
-    for suffix in (".fixture.bin", ".fixture.json", ".bin", ".json"):
-        if name.endswith(suffix):
-            return name[:-len(suffix)]
-    return name
+def load_users(path: str) -> set[int]:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
+    if isinstance(data, list):
+        raw_addresses = data
+    elif isinstance(data, dict) and isinstance(data.get("addresses"), list):
+        raw_addresses = data["addresses"]
+    else:
+        raise ValueError("user address file must be a list or have an addresses list")
 
-def fixture_binary_for(stem: str) -> str:
-    candidates = [
-        f"bin/{stem}.fixture.bin",
-        f"bin/{stem}.bin",
-    ]
-    for path in candidates:
-        if Path(path).exists():
-            return path
-    return candidates[0]
+    addresses: set[int] = set()
+    for value in raw_addresses:
+        if isinstance(value, int):
+            addresses.add(value)
+        elif isinstance(value, str):
+            addresses.add(int(value, 0))
+        else:
+            raise ValueError(f"invalid user address: {value!r}")
 
-
-def fixture_json_for(stem: str) -> str:
-    return f"fixtures/{stem}.fixture.json"
+    return addresses
 
 
 def is_probably_import(func: R2Function) -> bool:
@@ -323,52 +329,52 @@ class BinaryExtractor:
 def select_reachable(
     graph: dict[int, Counter[int]],
     root_addr: int,
-    *,
-    max_depth: int | None,
 ) -> set[int]:
     selected: set[int] = {root_addr}
-    queue: deque[tuple[int, int]] = deque([(root_addr, 0)])
+    queue: deque[int] = deque([root_addr])
 
     while queue:
-        addr, depth = queue.popleft()
-        if max_depth is not None and depth >= max_depth:
-            continue
+        addr = queue.popleft()
 
         for target in graph.get(addr, {}):
             if target in selected:
                 continue
             selected.add(target)
-            queue.append((target, depth + 1))
+            queue.append(target)
 
     return selected
 
 
-def apply_exclude_filters(
-    selected: set[int],
-    functions: dict[int, R2Function],
-    exclude_patterns: list[str],
-    *,
+def select_user_context(
+    graph: dict[int, Counter[int]],
     root_addr: int,
-    id_bias: int,
+    user_addrs: set[int],
+    *,
+    allowed_addrs: set[int],
+    score_root: bool,
 ) -> set[int]:
-    if not exclude_patterns:
-        return selected
+    """
+    Select the fixture subgraph for user-address mode.
 
-    regexes = [re.compile(pattern) for pattern in exclude_patterns]
-    kept: set[int] = set()
+    The normal workflow does not chase library/runtime internals.
+    It emits:
+      - the root anchor,
+      - all listed user functions,
+      - direct callees of listed user functions as one-hop anchors.
 
-    for addr in selected:
-        func = functions[addr]
-        haystack = (
-            f"{function_id(func.addr)} "
-            f"{function_id(func.addr, id_bias=id_bias)} "
-            f"{func.name} {func.addr:#x}"
-        )
-        if addr != root_addr and any(regex.search(haystack) for regex in regexes):
-            continue
-        kept.add(addr)
+    If --score-root is used, root is treated as a user context source too.
+    """
+    selected = {root_addr} | set(user_addrs)
+    context_sources = set(user_addrs)
+    if score_root:
+        context_sources.add(root_addr)
 
-    return kept
+    for src in context_sources:
+        for target in graph.get(src, {}):
+            if target in allowed_addrs:
+                selected.add(target)
+
+    return selected & allowed_addrs
 
 
 def make_fixture_json(
@@ -381,8 +387,8 @@ def make_fixture_json(
     graph: dict[int, Counter[int]],
     selected: set[int],
     score_root: bool,
-    max_depth: int | None,
-    exclude_patterns: list[str],
+    user_addrs: set[int] | None,
+    users_path: str | None,
     id_bias: int,
 ) -> dict[str, Any]:
     nodes = []
@@ -396,7 +402,10 @@ def make_fixture_json(
         ]
 
         is_root = addr == root.addr
-        node_type = "user" if score_root or not is_root else "anchor"
+        if user_addrs is None:
+            node_type = "user" if score_root or not is_root else "anchor"
+        else:
+            node_type = "user" if addr in user_addrs or (score_root and is_root) else "anchor"
         scored = node_type == "user"
 
         nodes.append(
@@ -411,8 +420,11 @@ def make_fixture_json(
     note = (
         f"generated by binary_extractor.py from {binary_path}; "
         f"root={function_id(root.addr, id_bias=id_bias)}/{root.name}; "
-        f"max_depth={'unbounded' if max_depth is None else max_depth}; "
-        f"excluded={exclude_patterns or []}; "
+        f"users={users_path or 'none'}; "
+        "listed user nodes are user/scored=true; "
+        "user mode emits root plus listed users plus direct callees "
+        "of listed users only; "
+        "non-user emitted nodes are anchor/scored=false; "
         "std/runtime classification is out of this extractor's research scope; "
         "edges to non-emitted targets are omitted"
     )
@@ -439,16 +451,40 @@ def extract_fixture(args: argparse.Namespace) -> dict[str, Any]:
             extractor.list_functions()
             return {}
 
+        user_addrs = (
+            load_users(args.users)
+            if args.users
+            else None
+        )
         root = extractor.resolve_root(args.root)
         graph = extractor.build_call_graph()
-        selected = select_reachable(graph, root.addr, max_depth=args.max_depth)
-        selected = apply_exclude_filters(
-            selected,
-            extractor.by_addr,
-            args.exclude_regex,
-            root_addr=root.addr,
-            id_bias=args.id_bias,
-        )
+        reachable = select_reachable(graph, root.addr)
+
+        if user_addrs is not None:
+            missing_starts = user_addrs - set(extractor.by_addr)
+            if missing_starts:
+                missing = ", ".join(f"0x{addr:x}" for addr in sorted(missing_starts))
+                raise ValueError(
+                    "user address(es) are not radare2 function starts "
+                    f"in stripped binary: {missing}"
+                )
+
+            missing_reachable = user_addrs - reachable
+            if missing_reachable:
+                missing = ", ".join(f"0x{addr:x}" for addr in sorted(missing_reachable))
+                raise ValueError(
+                    f"user address(es) are not reachable from root: {missing}"
+                )
+
+            selected = select_user_context(
+                graph,
+                root.addr,
+                user_addrs,
+                allowed_addrs=reachable,
+                score_root=args.score_root,
+            )
+        else:
+            selected = reachable
 
         return make_fixture_json(
             case=args.case,
@@ -459,8 +495,8 @@ def extract_fixture(args: argparse.Namespace) -> dict[str, Any]:
             graph=graph,
             selected=selected,
             score_root=args.score_root,
-            max_depth=args.max_depth,
-            exclude_patterns=args.exclude_regex,
+            user_addrs=user_addrs,
+            users_path=args.users,
             id_bias=args.id_bias,
         )
     finally:
@@ -486,7 +522,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "output",
         nargs="?",
-        help="output path, conventionally fixtures/<case>_auto.fixture.json",
+        help="output path. If omitted, writes fixtures/<case>.<build>.fixture.json.",
     )
     parser.add_argument(
         "--case",
@@ -495,14 +531,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--build",
-        default=DEFAULT_BUILD,
         help=f"build label. Default: {DEFAULT_BUILD}",
     )
     parser.add_argument(
         "-o",
         "--output",
         dest="output_option",
-        help="output path, conventionally fixtures/<case>.fixture.json",
+        help="output path. Positional output is preferred.",
     )
     parser.add_argument(
         "--root",
@@ -512,20 +547,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "startup wrapper detection, then entry0."
         ),
     )
-    parser.add_argument(
-        "--max-depth",
-        type=int,
-        help="maximum BFS depth from root. Omit for unbounded reachable closure.",
-    )
-    parser.add_argument(
-        "--exclude-regex",
-        action="append",
-        default=[],
-        help=(
-            "drop reachable non-root functions whose id/name/address matches this "
-            "regex. May be passed multiple times."
-        ),
-    )
+    parser.add_argument("--users", help="JSON file containing raw user addresses")
     parser.add_argument(
         "--score-root",
         action="store_true",
@@ -559,16 +581,21 @@ def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser
         parser.error("use either positional output or --output, not both")
 
     args.output = args.output_option or args.output
-    stem = case_stem(args.binary)
+    case, build = split_case_build(args.binary, args.build)
 
     if not Path(args.binary).exists():
-        args.binary = fixture_binary_for(stem)
+        args.binary = fixture_binary_for(case, build)
 
     if args.case == DEFAULT_CASE:
-        args.case = stem
+        args.case = case
+    args.build = build
 
     if args.output is None:
-        args.output = fixture_json_for(stem)
+        args.output = fixture_json_for(args.case, build)
+
+    default_users = resolve_users_json(args.case, build)
+    if args.users is None and Path(default_users).exists():
+        args.users = default_users
 
     if args.list_functions:
         return
