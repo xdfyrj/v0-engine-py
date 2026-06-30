@@ -222,7 +222,8 @@ Current policy:
 - `main` is excluded because it is an anchor, not a scored function
 - raw symbol address is converted to the fixture id format with `addr + 0x100000`, e.g. `0x13f00 -> FUN_00113f00`
 - same demangled origin name becomes one ground truth origin group
-- if multiple symbols resolve to the same address, the address/member is emitted once and the alias is recorded in top-level `note`
+- if duplicate symbols for the same origin resolve to the same address, the member is emitted once and the duplicate is recorded in top-level `note`
+- if different origins resolve to the same address, GT generation fails instead of silently choosing one origin
 
 Interpretation:
 

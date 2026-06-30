@@ -59,6 +59,26 @@ def main() -> int:
         print(f"FAIL expected {expected}, got {gt}")
         return 1
 
+    alias_symbols = parse_nm_lines([
+        "0000000000014000 t family_graph_02::first_origin",
+        "0000000000014000 t family_graph_02::second_origin",
+    ])
+    try:
+        make_ground_truth(
+            symbols=alias_symbols,
+            case="fg02",
+            build="O3S",
+            prefix="family_graph_02::",
+            id_bias=0x100000,
+        )
+    except ValueError as exc:
+        if "cross-origin address alias" not in str(exc):
+            print(f"FAIL unexpected cross-origin alias error: {exc}")
+            return 1
+    else:
+        print("FAIL cross-origin address alias should stop GT generation")
+        return 1
+
     addresses = user_addresses(symbols=symbols, prefix="family_graph_02::")
     expected_addresses = [0x14000, 0x14120, 0x14AF0, 0x14C10]
     if addresses != expected_addresses:

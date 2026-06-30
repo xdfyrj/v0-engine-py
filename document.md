@@ -664,15 +664,18 @@ alias_notes
 같은 주소에 여러 symbol이 붙는 경우가 있을 수 있다.
 예를 들어 compiler/linker 최적화 때문에 두 symbol이 같은 함수 body 주소를 공유할 수 있다.
 
-이때 ground truth member를 중복으로 넣으면 같은 함수 ID가 여러 origin에 들어가게 된다.
+이때 ground truth member를 중복으로 넣으면 같은 함수 ID가 여러 origin에 들어갈 수 있다.
 그러면 scoring universe가 깨진다.
 
-따라서 `make_ground_truth()`는 이미 본 member ID가 다시 나오면 한 번만 유지하고, 나머지는 `note`에 기록한다.
+따라서 `make_ground_truth()`는 두 경우를 나눈다.
+같은 origin의 duplicate symbol이면 한 번만 유지하고 `note`에 기록한다.
+하지만 서로 다른 origin이 같은 주소를 공유하면 GT 생성을 중단한다.
+이 경우 어느 origin을 정답으로 남길지 자동 선택하면 정답지가 오염되기 때문이다.
 
 예:
 ```json
 {
-  "note": "address aliases/duplicates: FUN_00114020: kept origin ..."
+  "note": "address aliases/duplicates: FUN_00114020: duplicate symbol for origin ..."
 }
 ```
 
@@ -680,7 +683,8 @@ alias_notes
 
 ```
 한 주소 = 한 member
-중복 symbol = note에 기록
+same-origin duplicate = note에 기록
+cross-origin alias = fail
 ```
 
 #### 7단계: fixture universe 검증

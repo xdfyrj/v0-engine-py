@@ -137,12 +137,14 @@ def make_ground_truth(
                     f"{member_id}: duplicate symbol for origin {origin!r} "
                     f"kept once ({symbol.name})"
                 )
-            else:
-                alias_notes.append(
-                    f"{member_id}: kept origin {owner!r}, skipped alias "
-                    f"origin {origin!r} ({symbol.name})"
-                )
-            continue
+                continue
+
+            raise ValueError(
+                f"cross-origin address alias at {member_id}: "
+                f"first origin {owner!r}, later origin {origin!r} "
+                f"({symbol.name}). Rebuild without cross-origin folding or "
+                "exclude/handle this case before scoring."
+            )
 
         owner_by_member[member_id] = origin
         members_by_origin[origin][member_id] = symbol.addr
