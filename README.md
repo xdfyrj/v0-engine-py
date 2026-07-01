@@ -34,7 +34,7 @@ fixtures/*.fixture.json
   -> predicted clusters
   -> scores.py
   <- ground_truth/*.gt.json
-  -> predicted clusters + TP / FP / FN + PR / RE / F1 / ARI
+  -> predicted clusters + symbols + TP / FP / FN + PR / RE / F1 / ARI
 
 gt_bin/*.gt.bin
   -> gt_extractor.py
@@ -49,7 +49,7 @@ bin/*.bin
 중요한 분리:
 
 - `fixtures/`: engine 입력. 함수 ID, node type, scored 여부, call edge만 담는다. 정답 origin은 절대 넣지 않는다.
-- `ground_truth/`: scorer 입력. origin partition과 origin type만 담는다.
+- `ground_truth/`: scorer 입력. origin partition과 출력용 demangled symbol을 담는다.
 - `users/`: non-stripped symbol side에서 뽑은 user function raw address set. origin/group 정보는 담지 않는다.
 - `engine.py`: ground truth를 보지 않는다.
 
@@ -183,7 +183,7 @@ Rules:
 {
   "case": "fg01",
   "build": "O3S",
-  "schema_version": 2,
+  "schema_version": 3,
   "origins": [
     {
       "origin": "shared_recursive",
@@ -193,15 +193,27 @@ Rules:
         "FUN_00113e20"
       ]
     }
-  ]
+  ],
+  "symbols": {
+    "FUN_00113f00": [
+      "family_graph_01::shared_recursive"
+    ],
+    "FUN_00113f80": [
+      "family_graph_01::shared_recursive::<i32>"
+    ],
+    "FUN_00113e20": [
+      "family_graph_01::shared_recursive::<u64>"
+    ]
+  }
 }
 ```
 
 Rules:
 
 - origin object fields are exactly `origin`, `members`
-- ground truth `schema_version` is currently `2`
+- ground truth `schema_version` is currently `3`
 - each scored fixture node must appear in exactly one origin
+- top-level `symbols` maps each scored function id to one or more original demangled symbol names
 - ground truth universe must equal fixture nodes with `scored=true`
 - `case` and `build` must match the fixture
 
@@ -222,6 +234,7 @@ Current policy:
 - `main` is excluded because it is an anchor, not a scored function
 - raw symbol address is converted to the fixture id format with `addr + 0x100000`, e.g. `0x13f00 -> FUN_00113f00`
 - same demangled origin name becomes one ground truth origin group
+- full demangled symbols are preserved in top-level `symbols`; if the binary was built with legacy Rust symbol mangling, generic type arguments may not be present in those symbols
 - if duplicate symbols for the same origin resolve to the same address, the member is emitted once and the duplicate is recorded in top-level `note`
 - if different origins resolve to the same address, GT generation fails instead of silently choosing one origin
 
@@ -389,6 +402,7 @@ The scorer compares predicted clusters against origin partition over the scored 
 Metrics:
 
 - predicted clusters over scored nodes
+- `symbols:` block showing the demangled symbol for each predicted cluster member
 - pairwise TP / FP / FN
 - Precision (`PR`)
 - Recall (`RE`)
@@ -488,7 +502,7 @@ gt_extractor.py     -> ground_truth/family_graph_03.O3S.gt.json
 gt_extractor.py     -> users/family_graph_03.O3S.users.json
 binary_extractor.py -> fixtures/family_graph_03.O3S.fixture.json
 engine.py CG-WL     -> predicted clusters
-scores.py           -> P/R/F1/ARI report
+scores.py           -> predicted clusters + symbols + TP/FP/FN + PR/RE/F1/ARI report
 ```
 
 Regenerate the current family_graph stems:

@@ -10,7 +10,7 @@
 
 `engine.py`는 fixture JSON만 보고 Rule R strict baseline을 실행한다. Rule R은 함수의 self-call count, non-self out-degree, caller/callee relation, call count를 반복적으로 반영하여 predicted cluster를 만든다. 즉 함수 body similarity가 아니라 call graph 안에서의 역할을 기준으로 grouping한다.
 
-`scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 predicted clusters, TP/FP/FN, Precision, Recall, F1, ARI를 출력한다.
+`scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 predicted clusters, symbols, TP/FP/FN, Precision, Recall, F1, ARI를 출력한다.
 
 따라서 `v0-engine-py`는 다음을 자동화한다.
 
@@ -651,7 +651,8 @@ function_id(addr, id_bias=0x100000)
 ```
 
 ground truth origin group에는 source-level kind label을 넣지 않는다.
-현재 scoring에 필요한 정보는 "같은 origin인가"뿐이므로 `origin`과 `members`만 남긴다.
+현재 scoring에 필요한 partition 정보는 "같은 origin인가"뿐이므로 `origin`과 `members`가 기준이다.
+다만 최종 리포트에서 instance를 읽기 쉽게 확인하기 위해 top-level `symbols` map에 각 member id의 원본 demangled symbol을 보존한다.
 generic/concrete/decoy 같은 해석 라벨은 compiler-derived partition 자체가 아니므로 GT schema에서 제거했다.
 
 #### 6단계: address alias / duplicate 처리
@@ -808,6 +809,7 @@ class GroundTruth:
     build: str
     schema_version: int
     origins: tuple[OriginGroup, ...]
+    symbols: dict[str, tuple[str, ...]]
 ```
 
 여기서 중요한 helper는 하나다.
@@ -838,11 +840,12 @@ _validate_ground_truth(data)
 
 검증 규칙은 다음과 같다.
 
-- top-level field가 `case`, `build`, `schema_version`, `origins`를 갖는가
-- `schema_version`이 2인가
+- top-level field가 `case`, `build`, `schema_version`, `origins`, `symbols`를 갖는가
+- `schema_version`이 3인가
 - origin 이름이 중복되지 않는가
 - members가 비어있지 않은가
 - 같은 member id가 둘 이상의 origin에 들어가지 않는가
+- `symbols` key가 ground truth member 전체와 정확히 같은가
 
 이 단계는 scoring이 틀어진 ground truth 위에서 실행되는 것을 막는 gatekeeper이다.
 
@@ -1065,8 +1068,11 @@ python3 scores.py fixtures/fg03_auto.fixture.json ground_truth/fg03_auto.gt.json
 ```text
 case : fg03 / O3S
 predicted clusters:
-  ['FUN_00145a83', 'FUN_00145ae1']
-  ['FUN_0014e803']
+  C1 = ['FUN_00145a83', 'FUN_00145ae1']
+  C2 = ['FUN_0014e803']
+symbols:
+  C1 = ['share::<i32>', 'share::<u64>']
+  C2 = ['decoy_a']
 TP=4 FP=1 FN=6
 PR=0.80 RE=0.40 F1=0.53 ARI=0.49
 ```

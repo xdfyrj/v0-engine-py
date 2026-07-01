@@ -6,13 +6,14 @@
 #
 # 규칙
 #   엔진은 origin 을 모른다. scorer 만 ground truth 를 본다.
-#   ground truth 는 origin partition 만 담는다.
+#   ground truth 는 origin partition 과 출력용 demangled symbol 만 담는다.
 #   채점 유니버스 = fixture 의 scored 노드 == ground truth 의 전체 member.
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from itertools import combinations
@@ -25,7 +26,7 @@ from paths import DEFAULT_BUILD, resolve_fixture_json, resolve_gt_json, split_ca
 
 # ---------------------------------------------------------- ground truth model
 
-GROUND_TRUTH_SCHEMA_VERSION = 2
+GROUND_TRUTH_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class GroundTruth:
     build: str
     schema_version: int
     origins: tuple[OriginGroup, ...]
+    symbols: dict[str, tuple[str, ...]]
 
     def origin_of(self) -> dict[str, str]:
         return {m: g.origin for g in self.origins for m in g.members}
@@ -62,6 +64,10 @@ def load_ground_truth(path: str) -> GroundTruth:
             )
             for o in data["origins"]
         ),
+        symbols={
+            member_id: tuple(symbols)
+            for member_id, symbols in data["symbols"].items()
+        },
     )
 
 
@@ -69,7 +75,7 @@ def _validate_ground_truth(data) -> None:
     if not isinstance(data, dict):
         raise ValueError("ground truth root must be a JSON object")
 
-    required = {"case", "build", "schema_version", "origins"}
+    required = {"case", "build", "schema_version", "origins", "symbols"}
     allowed = required | {"note"}
     keys = set(data)
     if required - keys:
@@ -105,6 +111,22 @@ def _validate_ground_truth(data) -> None:
                 raise ValueError(f"id appears in more than one origin: {m}")
             seen_members.add(m)
 
+    symbols = data["symbols"]
+    if not isinstance(symbols, dict):
+        raise ValueError("symbols must be an object mapping member id to symbol list")
+    if set(symbols) != seen_members:
+        raise ValueError(
+            "symbols keys must equal origin members. "
+            f"missing symbols: {sorted(seen_members - set(symbols))}; "
+            f"unknown symbols: {sorted(set(symbols) - seen_members)}"
+        )
+    for member_id, names in symbols.items():
+        if not isinstance(names, list) or not names:
+            raise ValueError(f"symbols[{member_id!r}] must be a non-empty list")
+        for name in names:
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(f"symbols[{member_id!r}] has an invalid symbol")
+
 
 # ---------------------------------------------------------- score result types
 
@@ -125,6 +147,7 @@ class ScoreReport:
     case: str
     build: str
     clusters: tuple[tuple[str, ...], ...]
+    cluster_symbols: tuple[tuple[str, ...], ...]
     pairwise: PairwiseScore
 
 
@@ -162,6 +185,10 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
         case=case.case,
         build=case.build,
         clusters=tuple(tuple(cluster) for cluster in result.clusters),
+        cluster_symbols=tuple(
+            tuple(_format_member_symbols(gt, node_id) for node_id in cluster)
+            for cluster in result.clusters
+        ),
         pairwise=pairwise,
     )
 
@@ -210,6 +237,20 @@ def _check_join(case: Case, gt: GroundTruth) -> None:
         )
 
 
+def _format_member_symbols(gt: GroundTruth, member_id: str) -> str:
+    names = tuple(_display_symbol(name, gt.case) for name in gt.symbols[member_id])
+    if len(names) == 1:
+        return names[0]
+    return " | ".join(names)
+
+
+def _display_symbol(symbol: str, case: str) -> str:
+    prefix = f"{case}::"
+    if symbol.startswith(prefix):
+        symbol = symbol[len(prefix):]
+    return re.sub(r"::h[0-9a-fA-F]{16}$", "", symbol)
+
+
 # ---------------------------------------------------------- pretty print + CLI
 
 def format_report(r: ScoreReport) -> str:
@@ -218,7 +259,15 @@ def format_report(r: ScoreReport) -> str:
         f"case : {r.case} / {r.build}",
         "predicted clusters:",
     ]
-    lines.extend(f"  {list(cluster)}" for cluster in r.clusters)
+    lines.extend(
+        f"  C{index} = {list(cluster)}"
+        for index, cluster in enumerate(r.clusters, start=1)
+    )
+    lines.append("symbols:")
+    lines.extend(
+        f"  C{index} = {list(symbols)}"
+        for index, symbols in enumerate(r.cluster_symbols, start=1)
+    )
     lines.extend([
         f"TP={p.tp} FP={p.fp} FN={p.fn}",
         f"PR={p.precision:.2f} RE={p.recall:.2f} F1={p.f1:.2f} ARI={p.ari:.2f}",

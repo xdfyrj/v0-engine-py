@@ -20,7 +20,7 @@ from paths import (
 )
 
 
-GT_SCHEMA_VERSION = 2
+GT_SCHEMA_VERSION = 3
 USERS_SCHEMA_VERSION = 1
 DEFAULT_ID_BIAS = 0x100000
 
@@ -120,6 +120,8 @@ def make_ground_truth(
     id_bias: int,
 ) -> dict[str, Any]:
     members_by_origin: dict[str, dict[str, int]] = defaultdict(dict)
+    member_addr: dict[str, int] = {}
+    symbols_by_member: dict[str, list[str]] = {}
     owner_by_member: dict[str, str] = {}
     alias_notes: list[str] = []
 
@@ -133,6 +135,8 @@ def make_ground_truth(
 
         if owner is not None:
             if owner == origin:
+                if symbol.name not in symbols_by_member[member_id]:
+                    symbols_by_member[member_id].append(symbol.name)
                 alias_notes.append(
                     f"{member_id}: duplicate symbol for origin {origin!r} "
                     f"kept once ({symbol.name})"
@@ -147,6 +151,8 @@ def make_ground_truth(
             )
 
         owner_by_member[member_id] = origin
+        member_addr[member_id] = symbol.addr
+        symbols_by_member[member_id] = [symbol.name]
         members_by_origin[origin][member_id] = symbol.addr
 
     origins = []
@@ -173,6 +179,13 @@ def make_ground_truth(
         "build": build,
         "schema_version": GT_SCHEMA_VERSION,
         "origins": origins,
+        "symbols": {
+            member_id: symbols_by_member[member_id]
+            for member_id, _addr in sorted(
+                member_addr.items(),
+                key=lambda item: item[1],
+            )
+        },
     }
 
     if alias_notes:

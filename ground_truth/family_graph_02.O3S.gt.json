@@ -1,7 +1,7 @@
 {
   "case": "family_graph_02",
   "build": "O3S",
-  "schema_version": 2,
+  "schema_version": 3,
   "origins": [
     {
       "origin": "process_beta",
@@ -55,5 +55,43 @@
         "FUN_00114f10"
       ]
     }
-  ]
+  ],
+  "symbols": {
+    "FUN_00114000": [
+      "family_graph_02::process_beta"
+    ],
+    "FUN_00114120": [
+      "family_graph_02::process_beta"
+    ],
+    "FUN_00114380": [
+      "family_graph_02::recurse_beta"
+    ],
+    "FUN_00114500": [
+      "family_graph_02::recurse_beta"
+    ],
+    "FUN_001145c0": [
+      "family_graph_02::process_alpha"
+    ],
+    "FUN_00114820": [
+      "family_graph_02::process_alpha"
+    ],
+    "FUN_00114940": [
+      "family_graph_02::recurse_alpha"
+    ],
+    "FUN_001149d0": [
+      "family_graph_02::recurse_alpha"
+    ],
+    "FUN_00114af0": [
+      "family_graph_02::c_process_alpha_i32"
+    ],
+    "FUN_00114c10": [
+      "family_graph_02::c_recurse_alpha_i32"
+    ],
+    "FUN_00114ca0": [
+      "family_graph_02::c_process_alpha_wide"
+    ],
+    "FUN_00114f10": [
+      "family_graph_02::c_recurse_alpha_wide"
+    ]
+  }
 }

@@ -33,7 +33,7 @@ def main() -> int:
     expected = {
         "case": "fg02",
         "build": "O3S",
-        "schema_version": 2,
+        "schema_version": 3,
         "origins": [
             {
                 "origin": "process_beta",
@@ -48,6 +48,15 @@ def main() -> int:
                 "members": ["FUN_00114c10"],
             },
         ],
+        "symbols": {
+            "FUN_00114000": ["family_graph_02::process_beta"],
+            "FUN_00114120": ["family_graph_02::process_beta::<i32>"],
+            "FUN_00114af0": [
+                "family_graph_02::c_process_alpha_i32",
+                "family_graph_02::c_process_alpha_i32::<u64>",
+            ],
+            "FUN_00114c10": ["family_graph_02::decoy_alpha"],
+        },
         "note": (
             "address aliases/duplicates: FUN_00114af0: duplicate symbol "
             "for origin 'c_process_alpha_i32' kept once "
