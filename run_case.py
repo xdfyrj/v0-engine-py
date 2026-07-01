@@ -69,7 +69,6 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     result = run_cg_wl(load_case(fixture_json))
     print(f"CG-WL rounds: {result.rounds}")
-    print(f"clusters: {result.clusters}")
     print(format_report(score_case(fixture_json, gt_json)))
 
 

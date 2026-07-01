@@ -34,7 +34,7 @@ fixtures/*.fixture.json
   -> predicted clusters
   -> scores.py
   <- ground_truth/*.gt.json
-  -> P / R / F1 / ARI + false-merge / fragmentation diagnostics
+  -> predicted clusters + TP / FP / FN + PR / RE / F1 / ARI
 
 gt_bin/*.gt.bin
   -> gt_extractor.py
@@ -388,16 +388,12 @@ The scorer compares predicted clusters against origin partition over the scored 
 
 Metrics:
 
-- pairwise TP / FP / FN / TN
-- Precision
-- Recall
+- predicted clusters over scored nodes
+- pairwise TP / FP / FN
+- Precision (`PR`)
+- Recall (`RE`)
 - F1
 - ARI, computed from pairwise counts
-
-Diagnostics:
-
-- false merge count: different origins placed in the same predicted cluster
-- `fragmented_origins`: same origin split across multiple predicted clusters
 
 ## Binary Extractor Draft
 

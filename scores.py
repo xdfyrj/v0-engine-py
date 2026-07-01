@@ -3,7 +3,6 @@
 #
 # 자동 채점기 (auto scorer)
 #   - 쌍별 precision / recall / F1 / ARI
-#   - false merge / fragmentation 진단
 #
 # 규칙
 #   엔진은 origin 을 모른다. scorer 만 ground truth 를 본다.
@@ -122,28 +121,11 @@ class PairwiseScore:
 
 
 @dataclass(frozen=True)
-class FalseMerge:
-    a: str
-    b: str
-    origin_a: str
-    origin_b: str
-
-
-@dataclass(frozen=True)
-class MissedPair:
-    a: str
-    b: str
-    origin: str
-
-
-@dataclass(frozen=True)
 class ScoreReport:
     case: str
     build: str
+    clusters: tuple[tuple[str, ...], ...]
     pairwise: PairwiseScore
-    false_merges: tuple[FalseMerge, ...]
-    missed_pairs: tuple[MissedPair, ...]
-    fragmented_origins: dict[str, int]       # origin -> #clusters it is split across
 
 
 # ---------------------------------------------------------- scoring
@@ -160,8 +142,6 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
     scored_ids = sorted(cluster_of)
 
     tp = fp = fn = tn = 0
-    false_merges: list[FalseMerge] = []
-    missed_pairs: list[MissedPair] = []
 
     for a, b in combinations(scored_ids, 2):
         pred_same = cluster_of[a] == cluster_of[b]
@@ -171,34 +151,18 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
             tp += 1
         elif pred_same and not true_same:
             fp += 1
-            false_merges.append(FalseMerge(
-                a=a, b=b,
-                origin_a=origin_of[a], origin_b=origin_of[b],
-            ))
         elif (not pred_same) and true_same:
             fn += 1
-            missed_pairs.append(MissedPair(a=a, b=b, origin=origin_of[a]))
         else:
             tn += 1
 
     pairwise = _pairwise_score(tp, fp, fn, tn)
 
-    origin_clusters: dict[str, set[int]] = {}
-    for nid, cid in cluster_of.items():
-        origin_clusters.setdefault(origin_of[nid], set()).add(cid)
-    fragmented = {
-        origin: len(cids)
-        for origin, cids in origin_clusters.items()
-        if len(cids) > 1
-    }
-
     return ScoreReport(
         case=case.case,
         build=case.build,
+        clusters=tuple(tuple(cluster) for cluster in result.clusters),
         pairwise=pairwise,
-        false_merges=tuple(false_merges),
-        missed_pairs=tuple(missed_pairs),
-        fragmented_origins=fragmented,
     )
 
 
@@ -252,15 +216,13 @@ def format_report(r: ScoreReport) -> str:
     p = r.pairwise
     lines = [
         f"case : {r.case} / {r.build}",
-        f"P={p.precision:.2f}  R={p.recall:.2f}  F1={p.f1:.2f}  ARI={p.ari:.2f}",
-        f"TP={p.tp} FP={p.fp} FN={p.fn} TN={p.tn}",
+        "predicted clusters:",
     ]
-    if r.false_merges:
-        lines.append(f"false merges (precision loss): {len(r.false_merges)} pair(s)")
-    if r.fragmented_origins:
-        lines.append("fragmentation (recall loss):")
-        for origin, k in sorted(r.fragmented_origins.items()):
-            lines.append(f"  {origin}: split across {k} clusters")
+    lines.extend(f"  {list(cluster)}" for cluster in r.clusters)
+    lines.extend([
+        f"TP={p.tp} FP={p.fp} FN={p.fn}",
+        f"PR={p.precision:.2f} RE={p.recall:.2f} F1={p.f1:.2f} ARI={p.ari:.2f}",
+    ])
     return "\n".join(lines)
 
 

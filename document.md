@@ -10,7 +10,7 @@
 
 `engine.py`는 fixture JSON만 보고 Rule R strict baseline을 실행한다. Rule R은 함수의 self-call count, non-self out-degree, caller/callee relation, call count를 반복적으로 반영하여 predicted cluster를 만든다. 즉 함수 body similarity가 아니라 call graph 안에서의 역할을 기준으로 grouping한다.
 
-`scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 pairwise Precision, Recall, F1, ARI를 출력하고, false merge와 missed same-origin pair를 진단한다.
+`scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 predicted clusters, TP/FP/FN, Precision, Recall, F1, ARI를 출력한다.
 
 따라서 `v0-engine-py`는 다음을 자동화한다.
 
@@ -743,7 +743,7 @@ ground truth origin partition
 ```
 
 ## 6. Scoring Path
-predicted cluster + ground truth -> TP/FP/FN/TN / Precision/Recall/F1-score/ARI
+predicted cluster + ground truth -> predicted clusters / TP/FP/FN / Precision/Recall/F1-score/ARI
 
 ### 6.1 scores.py
 `scores.py`는 engine이 만든 predicted cluster와 ground truth origin partition을 비교해서 점수를 계산한다.
@@ -753,11 +753,10 @@ predicted cluster + ground truth -> TP/FP/FN/TN / Precision/Recall/F1-score/ARI
 - ground truth JSON
 
 출력:
-- TP / FP / FN / TN
+- predicted clusters
+- TP / FP / FN
 - Precision / Recall / F1
 - ARI
-- false merge floor summary
-- fragmented origin summary
 
 큰 흐름은 7단계이다.
 
@@ -768,7 +767,7 @@ predicted cluster + ground truth -> TP/FP/FN/TN / Precision/Recall/F1-score/ARI
 4. Rule R engine 실행
 5. 모든 scored 함수 쌍을 비교
 6. P/R/F1/ARI 계산
-7. floor / fragmentation 진단 출력
+7. predicted clusters와 score 출력
 ```
 
 #### 1단계: ground truth model
@@ -1048,33 +1047,7 @@ $$
 따라서 ARI는 단순히 TP가 많다고 높아지는 값이 아니다.
 predicted cluster 크기와 true origin 크기까지 같이 반영한다.
 
-#### 8단계: false merge 진단
-
-FP가 발생했다는 것은 서로 다른 origin인 두 함수를 같은 cluster로 합쳤다는 뜻이다.
-현재 scorer는 GT에 type/kind label을 두지 않으므로 false merge에 별도 floor label을 붙이지 않는다.
-report에는 false merge pair 수만 요약한다.
-
-#### 9단계: fragmentation 진단
-관련 코드:
-```python
-origin_clusters
-fragmented
-```
-
-FN은 같은 origin이어야 하는 pair가 서로 다른 cluster로 갈라진 경우다.
-하지만 pair 목록만 보면 어떤 origin이 몇 조각으로 쪼개졌는지 한눈에 보기 어렵다.
-
-그래서 `scores.py`는 origin별로 몇 개 cluster에 걸쳐 있는지도 계산한다.
-
-예:
-```python
-share: split across 3 clusters
-```
-
-이건 recall floor를 설명할 때 중요하다.
-generic family가 relation 차이 또는 inlining 차이 때문에 여러 cluster로 분리되었음을 보여준다.
-
-#### 10단계: report 출력
+#### 8단계: report 출력
 핵심 함수:
 ```python
 format_report(r)
@@ -1091,12 +1064,11 @@ python3 scores.py fixtures/fg03_auto.fixture.json ground_truth/fg03_auto.gt.json
 
 ```text
 case : fg03 / O3S
-P=0.80  R=0.40  F1=0.53  ARI=0.49
-TP=4 FP=1 FN=6 TN=67
-false merges (precision loss): 1 pair(s)
-fragmentation (recall loss):
-  drive_x: split across 2 clusters
-  share: split across 3 clusters
+predicted clusters:
+  ['FUN_00145a83', 'FUN_00145ae1']
+  ['FUN_0014e803']
+TP=4 FP=1 FN=6
+PR=0.80 RE=0.40 F1=0.53 ARI=0.49
 ```
 
 정리하면 `scores.py`는 아래 연결을 담당한다.
