@@ -4,7 +4,7 @@ import argparse
 import sys
 from types import SimpleNamespace
 
-from engine import run_cg_wl
+from engine import CG_WL_MODES, DEFAULT_CG_WL_MODE, run_cg_wl
 from loader import load_case
 from paths import (
     DEFAULT_BUILD,
@@ -16,11 +16,12 @@ from paths import (
     split_case_build,
     users_json_for,
 )
-from scores import format_report, score_case
+from scores import format_report, score_all_modes, score_case
 
 
-def run_fixture_only(fixture_path: str) -> None:
-    result = run_cg_wl(load_case(fixture_path))
+def run_fixture_only(fixture_path: str, mode: str) -> None:
+    result = run_cg_wl(load_case(fixture_path), mode=mode)
+    print(result.mode)
     print(result.rounds)
     print(result.clusters)
 
@@ -67,9 +68,17 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     validate_against_fixture(gt, fixture_json)
 
-    result = run_cg_wl(load_case(fixture_json))
-    print(f"CG-WL rounds: {result.rounds}")
-    print(format_report(score_case(fixture_json, gt_json)))
+    if args.all_modes:
+        print("\n\n".join(
+            format_report(report)
+            for report in score_all_modes(fixture_json, gt_json)
+        ))
+    else:
+        print(format_report(score_case(
+            fixture_json,
+            gt_json,
+            mode=args.mode,
+        )))
 
 
 def extract_fixture(
@@ -161,6 +170,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build", help=f"build/profile. Default: {DEFAULT_BUILD}")
     parser.add_argument("--prefix", help="demangled symbol prefix for GT extraction")
     parser.add_argument("--root", help="root function name/id/address for binary extraction")
+    parser.add_argument(
+        "--mode",
+        choices=CG_WL_MODES,
+        default=DEFAULT_CG_WL_MODE,
+        help=f"CG-WL relation mode. Default: {DEFAULT_CG_WL_MODE}",
+    )
+    parser.add_argument(
+        "--all-modes",
+        action="store_true",
+        help="score full, out, in, and out-in modes",
+    )
     return parser
 
 
@@ -170,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.stem.endswith(".fixture.json"):
-            run_fixture_only(args.stem)
+            run_fixture_only(args.stem, args.mode)
         else:
             run_pipeline(args)
     except Exception as exc:

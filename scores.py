@@ -18,7 +18,12 @@ import sys
 from dataclasses import dataclass
 from itertools import combinations
 
-from engine import run_cg_wl
+from engine import (
+    CG_WL_MODES,
+    DEFAULT_CG_WL_MODE,
+    CGWLMode,
+    run_cg_wl,
+)
 from loader import load_case
 from model import Case
 from paths import DEFAULT_BUILD, resolve_fixture_json, resolve_gt_json, split_case_build
@@ -146,6 +151,8 @@ class PairwiseScore:
 class ScoreReport:
     case: str
     build: str
+    mode: CGWLMode
+    rounds: int
     clusters: tuple[tuple[str, ...], ...]
     cluster_symbols: tuple[tuple[str, ...], ...]
     pairwise: PairwiseScore
@@ -153,12 +160,17 @@ class ScoreReport:
 
 # ---------------------------------------------------------- scoring
 
-def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
+def score_case(
+    fixture_path: str,
+    ground_truth_path: str,
+    *,
+    mode: CGWLMode = DEFAULT_CG_WL_MODE,
+) -> ScoreReport:
     case = load_case(fixture_path)
     gt = load_ground_truth(ground_truth_path)
     _check_join(case, gt)
 
-    result = run_cg_wl(case)
+    result = run_cg_wl(case, mode=mode)
     cluster_of = result.cluster_id_by_node      # scored nodes only
     origin_of = gt.origin_of()
 
@@ -184,12 +196,24 @@ def score_case(fixture_path: str, ground_truth_path: str) -> ScoreReport:
     return ScoreReport(
         case=case.case,
         build=case.build,
+        mode=result.mode,
+        rounds=result.rounds,
         clusters=tuple(tuple(cluster) for cluster in result.clusters),
         cluster_symbols=tuple(
             tuple(_format_member_symbols(gt, node_id) for node_id in cluster)
             for cluster in result.clusters
         ),
         pairwise=pairwise,
+    )
+
+
+def score_all_modes(
+    fixture_path: str,
+    ground_truth_path: str,
+) -> tuple[ScoreReport, ...]:
+    return tuple(
+        score_case(fixture_path, ground_truth_path, mode=mode)
+        for mode in CG_WL_MODES
     )
 
 
@@ -257,6 +281,8 @@ def format_report(r: ScoreReport) -> str:
     p = r.pairwise
     lines = [
         f"case : {r.case} / {r.build}",
+        f"mode: {r.mode}",
+        f"rounds: {r.rounds}",
         "predicted clusters:",
     ]
     lines.extend(
@@ -289,6 +315,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="ground-truth JSON path",
     )
     parser.add_argument("--build", help=f"build/profile. Default: {DEFAULT_BUILD}")
+    parser.add_argument(
+        "--mode",
+        choices=CG_WL_MODES,
+        default=DEFAULT_CG_WL_MODE,
+        help=f"CG-WL relation mode. Default: {DEFAULT_CG_WL_MODE}",
+    )
+    parser.add_argument(
+        "--all-modes",
+        action="store_true",
+        help="score full, out, in, and out-in modes",
+    )
     return parser
 
 
@@ -305,7 +342,15 @@ def main(argv: list[str] | None = None) -> int:
         gt_path = args.ground_truth
 
     try:
-        print(format_report(score_case(fixture_path, gt_path)))
+        if args.all_modes:
+            reports = score_all_modes(fixture_path, gt_path)
+            print("\n\n".join(format_report(report) for report in reports))
+        else:
+            print(format_report(score_case(
+                fixture_path,
+                gt_path,
+                mode=args.mode,
+            )))
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

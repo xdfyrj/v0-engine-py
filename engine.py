@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from loader import load_case
-from model import Case, Node
+from model import Case
 from paths import DEFAULT_BUILD, resolve_fixture_json, split_case_build
 
 
@@ -18,12 +18,21 @@ CallCount = int
 
 WeightedEdge = tuple[NodeId, CallCount]
 WeightedNeighborColor = tuple[Color, CallCount]
+CGWLMode = str
 
-RelationSignature = tuple[
-    Color,
-    tuple[WeightedNeighborColor, ...],  # OUT multiset
-    tuple[WeightedNeighborColor, ...],  # IN multiset
-]
+MODE_FULL = "full"
+MODE_OUT = "out"
+MODE_IN = "in"
+MODE_OUT_IN = "out-in"
+DEFAULT_CG_WL_MODE = MODE_FULL
+CG_WL_MODES: tuple[CGWLMode, ...] = (
+    MODE_FULL,
+    MODE_OUT,
+    MODE_IN,
+    MODE_OUT_IN,
+)
+
+RelationSignature = tuple[object, ...]
 
 
 @dataclass(frozen=True)
@@ -36,7 +45,6 @@ class RelationGraphView:
     outgoing/incoming multisets.
     """
     node_ids: list[NodeId]
-    node_by_id: dict[NodeId, Node]
 
     self_call_count: dict[NodeId, int]
 
@@ -48,26 +56,32 @@ class RelationGraphView:
     # This is intentionally not total outgoing call count.
     distinct_out_callee_count: dict[NodeId, int]
 
+    # Number of distinct non-self callers.
+    distinct_in_caller_count: dict[NodeId, int]
+
 
 @dataclass(frozen=True)
 class CGWLResult:
     """
     Result of Call-Graph Weisfeiler-Lehman.
 
-    node_color contains colors for all nodes, including anchors.
     cluster_id_by_node and clusters are restricted to scored nodes.
     """
-    node_color: dict[NodeId, Color]
+    mode: CGWLMode
     cluster_id_by_node: dict[NodeId, int]
     clusters: list[list[NodeId]]
     rounds: int
 
 
-def run_cg_wl(case: Case) -> CGWLResult:
+def run_cg_wl(
+    case: Case,
+    *,
+    mode: CGWLMode = DEFAULT_CG_WL_MODE,
+) -> CGWLResult:
     """
     Run Call-Graph Weisfeiler-Lehman.
 
-    v0 policy:
+    full mode:
       - Axis 1 only.
       - Directed weighted call graph.
       - Individualized fixed anchors.
@@ -76,20 +90,21 @@ def run_cg_wl(case: Case) -> CGWLResult:
       - OUT/IN multisets aggregate call counts by previous neighbor color.
       - No origin labels, no Axis 2/4, no oracle, no soft merge.
     """
+    validate_cg_wl_mode(mode)
     view = build_relation_graph_view(case)
-    colors = make_initial_cg_wl_colors(case, view)
+    colors = make_initial_cg_wl_colors(case, view, mode=mode)
 
     max_rounds = len(view.node_ids)
 
     for round_index in range(1, max_rounds + 1):
-        new_colors = refine_cg_wl_once(case, view, colors)
+        new_colors = refine_cg_wl_once(case, view, colors, mode=mode)
 
         if same_partition(view.node_ids, colors, new_colors):
             clusters = make_scored_clusters(case, new_colors)
             cluster_id_by_node = make_cluster_id_by_node(clusters)
 
             return CGWLResult(
-                node_color=new_colors,
+                mode=mode,
                 cluster_id_by_node=cluster_id_by_node,
                 clusters=clusters,
                 rounds=round_index,
@@ -102,7 +117,6 @@ def run_cg_wl(case: Case) -> CGWLResult:
 
 def build_relation_graph_view(case: Case) -> RelationGraphView:
     node_ids = [node.id for node in case.nodes]
-    node_by_id = {node.id: node for node in case.nodes}
 
     self_call_count: dict[NodeId, int] = {
         node.id: 0
@@ -135,21 +149,28 @@ def build_relation_graph_view(case: Case) -> RelationGraphView:
         node_id: len({dst for dst, _count in outgoing[node_id]})
         for node_id in node_ids
     }
+    distinct_in_caller_count = {
+        node_id: len({src for src, _count in incoming[node_id]})
+        for node_id in node_ids
+    }
 
     return RelationGraphView(
         node_ids=node_ids,
-        node_by_id=node_by_id,
         self_call_count=self_call_count,
         outgoing=outgoing,
         incoming=incoming,
         distinct_out_callee_count=distinct_out_callee_count,
+        distinct_in_caller_count=distinct_in_caller_count,
     )
 
 
 def make_initial_cg_wl_colors(
     case: Case,
     view: RelationGraphView,
+    *,
+    mode: CGWLMode = DEFAULT_CG_WL_MODE,
 ) -> dict[NodeId, Color]:
+    validate_cg_wl_mode(mode)
     colors: dict[NodeId, Color] = {}
 
     for node in case.nodes:
@@ -158,9 +179,13 @@ def make_initial_cg_wl_colors(
             continue
 
         self_count = view.self_call_count[node.id]
-        out_count = view.distinct_out_callee_count[node.id]
 
-        colors[node.id] = f"USER:self={self_count}:distinct_out={out_count}"
+        if mode == MODE_IN:
+            in_count = view.distinct_in_caller_count[node.id]
+            colors[node.id] = f"USER:self={self_count}:distinct_in={in_count}"
+        else:
+            out_count = view.distinct_out_callee_count[node.id]
+            colors[node.id] = f"USER:self={self_count}:distinct_out={out_count}"
 
     return colors
 
@@ -169,7 +194,10 @@ def refine_cg_wl_once(
     case: Case,
     view: RelationGraphView,
     prev_colors: dict[NodeId, Color],
+    *,
+    mode: CGWLMode = DEFAULT_CG_WL_MODE,
 ) -> dict[NodeId, Color]:
+    validate_cg_wl_mode(mode)
     signatures: dict[NodeId, RelationSignature] = {}
 
     for node in case.nodes:
@@ -184,11 +212,13 @@ def refine_cg_wl_once(
             view.incoming[node.id],
             prev_colors,
         )
-
-        signatures[node.id] = (
+        signatures[node.id] = make_relation_signature(
+            node.id,
             prev_colors[node.id],
             out_multiset,
             in_multiset,
+            view,
+            mode=mode,
         )
 
     signature_to_color = _canonicalize_signatures(signatures)
@@ -202,6 +232,37 @@ def refine_cg_wl_once(
             new_colors[node.id] = signature_to_color[signatures[node.id]]
 
     return new_colors
+
+
+def make_relation_signature(
+    node_id: NodeId,
+    previous_color: Color,
+    out_multiset: tuple[WeightedNeighborColor, ...],
+    in_multiset: tuple[WeightedNeighborColor, ...],
+    view: RelationGraphView,
+    *,
+    mode: CGWLMode,
+) -> RelationSignature:
+    if mode == MODE_FULL:
+        return (previous_color, out_multiset, in_multiset)
+    if mode == MODE_OUT:
+        return (previous_color, out_multiset)
+    if mode == MODE_IN:
+        return (previous_color, in_multiset)
+    if mode == MODE_OUT_IN:
+        if view.distinct_out_callee_count[node_id] == 0:
+            return (previous_color, out_multiset, in_multiset)
+        return (previous_color, out_multiset)
+
+    raise ValueError(f"unknown CG-WL mode: {mode}")
+
+
+def validate_cg_wl_mode(mode: CGWLMode) -> None:
+    if mode not in CG_WL_MODES:
+        raise ValueError(
+            f"unknown CG-WL mode: {mode!r}. "
+            f"expected one of {', '.join(CG_WL_MODES)}"
+        )
 
 
 def _neighbor_color_multiset(
@@ -293,8 +354,12 @@ def _anchor_color(node_id: NodeId) -> Color:
     return f"ANCHOR:{node_id}"
 
 
-def run_fixture_path(fixture_path: str) -> CGWLResult:
-    return run_cg_wl(load_case(fixture_path))
+def run_fixture_path(
+    fixture_path: str,
+    *,
+    mode: CGWLMode = DEFAULT_CG_WL_MODE,
+) -> CGWLResult:
+    return run_cg_wl(load_case(fixture_path), mode=mode)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -303,6 +368,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("fixture", help="fixture JSON path, or an example stem")
     parser.add_argument("--build", help=f"build/profile. Default: {DEFAULT_BUILD}")
+    parser.add_argument(
+        "--mode",
+        choices=CG_WL_MODES,
+        default=DEFAULT_CG_WL_MODE,
+        help=f"relation mode. Default: {DEFAULT_CG_WL_MODE}",
+    )
     return parser
 
 
@@ -316,11 +387,12 @@ def main(argv: list[str] | None = None) -> int:
         fixture_path = resolve_fixture_json(case, build)
 
     try:
-        result = run_fixture_path(fixture_path)
+        result = run_fixture_path(fixture_path, mode=args.mode)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    print(result.mode)
     print(result.rounds)
     print(result.clusters)
     return 0

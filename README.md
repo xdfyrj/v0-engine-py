@@ -4,7 +4,9 @@ Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 
 이 프로젝트는 stripped binary에서 추출했다고 가정한 함수 간 호출 관계 JSON을 입력으로 받아, Call-Graph Weisfeiler-Lehman(CG-WL) color refinement를 실행하고, 별도 ground truth JSON과 비교해 pairwise Precision/Recall/F1 및 ARI를 계산한다.
 
-현재 범위는 **Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority policy, std/library classifier는 아직 포함하지 않는다.
+현재 범위는 **Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority mode, std/library classifier는 아직 포함하지 않는다.
+
+파이프라인 각 단계의 상세 설계 설명은 [`docs/document.md`](docs/document.md)를 참고한다.
 
 ## Requirements
 
@@ -226,7 +228,7 @@ ground_truth/<case>.<build>.gt.json
 users/<case>.<build>.users.json
 ```
 
-Current policy:
+Current extraction rules:
 
 - symbol source is `nm -n -C`
 - controlled builds are expected to use Rust legacy symbol mangling; v0-style demangled generic arguments like `::<i32>` are stripped defensively when present
@@ -336,7 +338,7 @@ family_graph_03 --build O3KS
 
 ## Call-Graph Weisfeiler-Lehman
 
-Implemented in `engine.py` as `run_cg_wl(case)`.
+Implemented in `engine.py` as `run_cg_wl(case, mode="full")`.
 
 CG-WL is a directed, weighted, anchor-aware 1-WL refinement over the call graph.
 
@@ -345,24 +347,30 @@ Used Axis 1 features:
 ```text
 self_call_count[v]                  count(v -> v)
 distinct_out_callee_count[v]         number of distinct non-self callees
+distinct_in_caller_count[v]          number of distinct non-self callers
 outgoing[v]                          non-self outgoing weighted edges
 incoming[v]                          non-self incoming weighted edges
 ```
 
-v0 policy:
+Common behavior:
 
 - directed weighted call graph
 - individualized fixed anchor colors
 - anchors participate as relation context but are not scored
-- seed for user nodes: `(self_call_count, distinct_out_callee_count)`
-- refinement signature:
+- neighbor multisets aggregate call counts by previous neighbor color
+
+Relation modes:
+
+- `full`: seed `(self_call_count, distinct_out_callee_count)`, refine with OUT + IN
+- `out`: seed `(self_call_count, distinct_out_callee_count)`, refine with OUT only
+- `in`: seed `(self_call_count, distinct_in_caller_count)`, refine with IN only
+- `out-in`: seed `(self_call_count, distinct_out_callee_count)`, refine with OUT; if `distinct_out_callee_count == 0`, refine with OUT + IN
 
 ```text
-(
-  previous_color[v],
-  OUT multiset by previous neighbor color,
-  IN multiset by previous neighbor color
-)
+full   : (previous_color[v], OUT multiset, IN multiset)
+out    : (previous_color[v], OUT multiset)
+in     : (previous_color[v], IN multiset)
+out-in : non-leaf -> out; leaf -> full
 ```
 
 Neighbor multiset rule:
@@ -477,6 +485,7 @@ python3 engine.py fixtures/family_graph_03.O3S.fixture.json
 Expected fg01 output:
 
 ```text
+full
 1
 [['FUN_00113e20', 'FUN_00113f00', 'FUN_00113f80'], ['FUN_00114460', 'FUN_00114640', 'FUN_00114880']]
 ```
@@ -486,6 +495,7 @@ Case/build shortcut:
 ```bash
 python3 engine.py family_graph_03
 python3 engine.py family_graph_03 --build O3KS
+python3 engine.py family_graph_03 --mode out-in
 ```
 
 Run the full pipeline for one stem:
@@ -493,6 +503,7 @@ Run the full pipeline for one stem:
 ```bash
 python3 run_case.py family_graph_03
 python3 run_case.py family_graph_03 --build O3KS
+python3 run_case.py family_graph_03 --all-modes
 ```
 
 This executes:
@@ -525,7 +536,32 @@ Case/build shortcut:
 ```bash
 python3 scores.py family_graph_03
 python3 scores.py family_graph_03 --build O3KS
+python3 scores.py family_graph_03 --mode out
+python3 scores.py family_graph_03 --all-modes
 ```
+
+Generate family-level measurement reports:
+
+```bash
+python3 family_report.py
+python3 family_report.py family_graph_01
+python3 family_report.py family_graph_03 --mode out
+python3 family_report.py family_graph_03.O3KS --out-dir reports/fg03_o3ks
+```
+
+This writes:
+
+```text
+reports/family_measurement.md
+reports/family_consistency.csv
+reports/depth_curve.csv
+reports/collision_catalog.csv
+```
+
+`family_report.py` is score-side measurement code. It annotates predicted
+clusters with origin/family labels after CG-WL has run; the engine still never
+reads ground truth. By default it reports all modes: `full`, `out`, `in`,
+`out-in`.
 
 Extract compiler-derived ground truth:
 
@@ -554,7 +590,7 @@ python3 test/test_engine.py
 python3 test/test_binary_extractor.py
 python3 test/test_gt_extractor.py
 python3 test/test_scores.py
-python3 -m py_compile binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py
+python3 -m py_compile binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py family_report.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py
 ```
 
 Current score regression targets:

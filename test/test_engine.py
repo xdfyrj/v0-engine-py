@@ -3,10 +3,44 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine import _neighbor_color_multiset
+from engine import _neighbor_color_multiset, run_cg_wl
+from model import Call, Case, Node
+
+
+def check_relation_modes() -> int:
+    case = Case(
+        case="mode-test",
+        build="unit",
+        schema_version=1,
+        nodes=[
+            Node("caller_a", "anchor", False, [Call("leaf_a", 1)]),
+            Node("caller_b", "anchor", False, [Call("leaf_b", 1)]),
+            Node("leaf_a", "user", True, []),
+            Node("leaf_b", "user", True, []),
+        ],
+    )
+
+    expected_split = [["leaf_a"], ["leaf_b"]]
+    checks = {
+        "full": expected_split,
+        "out": [["leaf_a", "leaf_b"]],
+        "in": expected_split,
+        "out-in": expected_split,
+    }
+
+    for mode, expected in checks.items():
+        got = run_cg_wl(case, mode=mode).clusters
+        if got != expected:
+            print(f"FAIL mode {mode}: expected {expected}, got {got}")
+            return 1
+
+    return 0
 
 
 def main() -> int:
+    if check_relation_modes() != 0:
+        return 1
+
     prev_colors = {
         "callee_a": "C:leaf",
         "callee_b": "C:leaf",
@@ -29,6 +63,7 @@ def main() -> int:
         return 1
 
     print("neighbor color multiset aggregation PASS")
+    print("CG-WL relation modes PASS")
     return 0
 
 

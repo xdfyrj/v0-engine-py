@@ -87,7 +87,7 @@ def check_rust_startup_main_detection() -> int:
     return 0
 
 
-def check_user_address_policy() -> int:
+def check_user_address_mode() -> int:
     functions = {
         0x1000: R2Function(addr=0x1000, name="real_main", size=0x40, kind="fcn"),
         0x2000: R2Function(addr=0x2000, name="user_fn", size=0x20, kind="fcn"),
@@ -139,7 +139,7 @@ def check_user_address_policy() -> int:
         for node_id, node in nodes.items()
     }
     if actual_types != expected_types:
-        print(f"FAIL expected user policy {expected_types}, got {actual_types}")
+        print(f"FAIL expected user mode {expected_types}, got {actual_types}")
         return 1
 
     expected_user_calls = [{"target": "FUN_00103000", "count": 2}]
@@ -166,7 +166,7 @@ def main() -> int:
     if check_rust_startup_main_detection() != 0:
         return 1
 
-    if check_user_address_policy() != 0:
+    if check_user_address_mode() != 0:
         return 1
 
     extractor = BinaryExtractor.__new__(BinaryExtractor)
