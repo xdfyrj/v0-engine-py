@@ -295,6 +295,8 @@ Rules:
   - listed user address -> `type=user`, `scored=true`
   - direct callee of a listed user function -> `type=anchor`, `scored=false`
   - root main -> `type=anchor`, `scored=false`
+- root anchor keeps edges to listed user functions
+- non-root anchors are terminal: their outgoing/self edges are not emitted
 - library/runtime internals beyond those one-hop anchors are not chased
 
 This keeps the normal family_graph pipeline free of case-specific depth limits
@@ -428,6 +430,8 @@ It is intentionally shallow:
 - user functions are supplied as raw addresses from `users/*.users.json`
 - in user-address mode, anchor context is intentionally one-hop:
   direct callees of listed user functions only
+- root anchor keeps edges to listed user functions
+- non-root anchors are terminal and do not emit outgoing/self edges
 - Rust root auto-detection follows the known Rust/glibc startup pattern:
   `entry0 -> __libc_start_main(wrapper) -> wrapper -> lang_start_internal(real_main, ...)`
 - edges to functions omitted from output are dropped
@@ -540,28 +544,40 @@ python3 scores.py family_graph_03 --mode out
 python3 scores.py family_graph_03 --all-modes
 ```
 
-Generate family-level measurement reports:
+Generate family-level measurement source reports:
 
 ```bash
 python3 family_report.py
 python3 family_report.py family_graph_01
 python3 family_report.py family_graph_03 --mode out
+python3 family_report.py family_graph_03 --all-modes
 python3 family_report.py family_graph_03.O3KS --out-dir reports/fg03_o3ks
 ```
 
 This writes:
 
 ```text
-reports/family_measurement.md
-reports/family_consistency.csv
-reports/depth_curve.csv
-reports/collision_catalog.csv
+reports/measurement_evidence.md
+reports/origins.csv
+reports/anchors.csv
+reports/instance_relations.csv
+reports/round_partitions.csv
+reports/round_signatures.csv
+reports/family_rows.csv
+reports/predicted_clusters.csv
+reports/collision_candidates.csv
+reports/scores.csv
 ```
 
 `family_report.py` is score-side measurement code. It annotates predicted
 clusters with origin/family labels after CG-WL has run; the engine still never
-reads ground truth. By default it reports all modes: `full`, `out`, `in`,
-`out-in`.
+reads ground truth. It is intended as a minimal evidence pack for writing
+measurement notes, not as an automatic diagnosis generator. It reports observed
+origin membership, anchor context, per-instance Axis-1 relations, round
+partitions/signatures, family rows, predicted clusters, collision candidates,
+and pairwise scores. It intentionally omits diagnosis, conclusions,
+source-level census, and coverage. The default mode is `full`; use
+`--all-modes` to report `full`, `out`, `in`, and `out-in`.
 
 Extract compiler-derived ground truth:
 
