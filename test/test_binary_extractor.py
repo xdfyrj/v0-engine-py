@@ -97,7 +97,7 @@ def check_user_address_mode() -> int:
     graph = {
         0x1000: Counter({0x2000: 1, 0x3000: 1}),
         0x2000: Counter({0x3000: 2}),
-        0x3000: Counter({0x4000: 1}),
+        0x3000: Counter({0x3000: 7, 0x4000: 1}),
         0x4000: Counter(),
     }
     selected = select_user_context(
@@ -149,9 +149,16 @@ def check_user_address_mode() -> int:
             f"anchors, got {nodes['FUN_00102000']['calls']}"
         )
         return 1
+    expected_root_calls = [{"target": "FUN_00102000", "count": 1}]
+    if nodes["FUN_00101000"]["calls"] != expected_root_calls:
+        print(
+            "FAIL root anchor should retain only edges to listed users, "
+            f"got {nodes['FUN_00101000']['calls']}"
+        )
+        return 1
     if nodes["FUN_00103000"]["calls"] != []:
         print(
-            "FAIL one-hop library anchor should not retain edges to transitive "
+            "FAIL one-hop library anchor should not retain self or transitive "
             f"library internals, got {nodes['FUN_00103000']['calls']}"
         )
         return 1
@@ -174,6 +181,7 @@ def main() -> int:
     extractor.by_addr = {
         0x1000: R2Function(addr=0x1000, name="caller", size=0x40, kind="fcn"),
         0x2000: R2Function(addr=0x2000, name="callee", size=0x20, kind="fcn"),
+        0x4D6B3: R2Function(addr=0x4D6B3, name="oversized_lib", size=0xDA9E, kind="fcn"),
     }
 
     caller = extractor.by_addr[0x1000]
@@ -200,6 +208,18 @@ def main() -> int:
     )
     if conditional_branch is not None:
         print("FAIL: conditional jump must not count as tail call")
+        return 1
+
+    indirect_memory_call = extractor._direct_call_target(
+        caller,
+        {
+            "type": "ircall",
+            "opcode": "call qword [rip + 0x4168c]",
+            "ptr": 0x55FC0,
+        },
+    )
+    if indirect_memory_call is not None:
+        print("FAIL: indirect memory call ptr must not be treated as callee")
         return 1
 
     print("binary extractor startup/tail-call handling PASS")

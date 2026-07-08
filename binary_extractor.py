@@ -322,7 +322,7 @@ class BinaryExtractor:
         current_func: R2Function,
         op: dict[str, Any],
     ) -> R2Function | None:
-        target = self._call_target(op)
+        target = self._direct_code_target(op)
         if target is None:
             return None
 
@@ -347,11 +347,10 @@ class BinaryExtractor:
         return op_type in {"jmp", "ujmp"} or opcode.startswith("jmp ")
 
     @staticmethod
-    def _call_target(op: dict[str, Any]) -> int | None:
-        for key in ("jump", "ptr", "val"):
-            value = op.get(key)
-            if isinstance(value, int):
-                return value
+    def _direct_code_target(op: dict[str, Any]) -> int | None:
+        value = op.get("jump")
+        if isinstance(value, int):
+            return value
         return None
 
     def build_call_graph(self) -> dict[int, Counter[int]]:
@@ -427,17 +426,24 @@ def make_fixture_json(
 
     for addr in sorted(selected):
         func = functions[addr]
-        calls = [
-            {"target": function_id(target, id_bias=id_bias), "count": count}
-            for target, count in sorted(graph.get(addr, {}).items())
-            if target in selected and count > 0
-        ]
-
         is_root = addr == root.addr
         if user_addrs is None:
             node_type = "user" if score_root or not is_root else "anchor"
+            allowed_targets = selected
         else:
             node_type = "user" if addr in user_addrs or (score_root and is_root) else "anchor"
+            if node_type == "user":
+                allowed_targets = selected
+            elif is_root:
+                allowed_targets = user_addrs
+            else:
+                allowed_targets = set()
+
+        calls = [
+            {"target": function_id(target, id_bias=id_bias), "count": count}
+            for target, count in sorted(graph.get(addr, {}).items())
+            if target in allowed_targets and count > 0
+        ]
         scored = node_type == "user"
 
         nodes.append(
@@ -456,7 +462,8 @@ def make_fixture_json(
         "listed user nodes are user/scored=true; "
         "user mode emits root plus listed users plus direct callees "
         "of listed users only; "
-        "non-user emitted nodes are anchor/scored=false; "
+        "root anchor retains edges to listed users; "
+        "non-root anchors are terminal/scored=false; "
         "std/runtime classification is out of this extractor's research scope; "
         "edges to non-emitted targets are omitted"
     )
