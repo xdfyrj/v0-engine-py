@@ -4,17 +4,17 @@
 
 `v0-engine-py`는 Rust monomorphized function family regrouping 연구를 위한 v0 prototype이다. 목표는 완전한 Rust reverse engineering 도구를 만드는 것이 아니라, stripped Rust binary에서 관찰 가능한 **Axis 1 call relation**만으로 같은 generic origin에서 나온 함수 묶음을 어느 정도 복원할 수 있는지 측정하는 것이다.
 
-`binary_extractor.py`는 stripped binary에서 direct call 및 tail-call-like jump를 추출하여 Rule R이 사용할 fixture JSON을 만든다. 이 fixture에는 함수 ID, node type, scored 여부, call target, call count만 들어간다. generic origin label이나 type 정보는 포함하지 않는다.
+`binary_extractor.py`는 stripped binary에서 direct call 및 tail-call-like jump를 추출하여 CG-WL이 사용할 fixture JSON을 만든다. 이 fixture에는 함수 ID, node type, scored 여부, call target, call count만 들어간다. generic origin label이나 type 정보는 포함하지 않는다.
 
 `gt_extractor.py`는 non-stripped binary의 symbol 정보를 이용해 ground truth JSON을 만든다. 이 ground truth는 어떤 함수들이 같은 generic source definition에서 나온 instance인지 기록한다. 이 정보는 clustering 단계에서는 사용되지 않고, scoring 단계에서만 사용된다.
 
-`engine.py`는 fixture JSON만 보고 Rule R strict baseline을 실행한다. Rule R은 함수의 self-call count, non-self out-degree, caller/callee relation, call count를 반복적으로 반영하여 predicted cluster를 만든다. 즉 함수 body similarity가 아니라 call graph 안에서의 역할을 기준으로 grouping한다.
+`engine.py`는 fixture JSON만 보고 Call-Graph Weisfeiler-Lehman(CG-WL)을 실행한다. CG-WL은 함수의 self-call count, non-self out-degree, caller/callee relation, call count를 반복적으로 반영하여 predicted cluster를 만든다. 즉 함수 body similarity가 아니라 call graph 안에서의 역할을 기준으로 grouping한다.
 
 `scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 predicted clusters, symbols, TP/FP/FN, Precision, Recall, F1, ARI를 출력한다.
 
 따라서 `v0-engine-py`는 다음을 자동화한다.
 
-`stripped binary → call-relation fixture → Rule R clustering → ground truth scoring`
+`stripped binary → call-relation fixture → CG-WL clustering → ground truth scoring`
 
 다만 이 도구는 아직 user/library filtering, indirect call recovery, type recovery, inlining-aware similarity를 해결하지 않는다. 현재 목적은 relation-only baseline의 가능성과 한계를 재현 가능한 형태로 고정하는 것이다.
 
@@ -259,7 +259,7 @@ root 함수(main 함수라고 찾은 함수)는 기본적으로 anchor가 된다
 }
 ```
 
-즉 root/main은 Rule R refinement에는 영향을 줄 수 있지만, 최종 scoring에는 들어가지 않는다.
+즉 root/main은 CG-WL refinement에는 영향을 줄 수 있지만, 최종 scoring에는 들어가지 않는다.
 
 그리고, fixture JSON에는 ground truth origin이 없기에 label leakage를 막을 수 있다.
 
@@ -276,7 +276,7 @@ fixture JSON은 `loader.py` 파일의 `load_case()`가 읽는다.
 	- -> `_validate_calls()`
 	- -> `Case(...)` 
 
-단순 `Case(Node(Call()))` 형식의 parsing이 주가 아니라, 세부적인 Rule R engine이 해석할 수 있는 안전한 입력인지 검증하는 gatekeeper 역할이 핵심이다.
+단순 `Case(Node(Call()))` 형식의 parsing이 주가 아니라, 세부적인 CG-WL engine이 해석할 수 있는 안전한 입력인지 검증하는 gatekeeper 역할이 핵심이다.
 
 주요 검증 대상은 다음과 같다:
 - top-level field가 올바른가  
@@ -286,7 +286,7 @@ fixture JSON은 `loader.py` 파일의 `load_case()`가 읽는다.
 - call count가 양수인가  
 - 같은 source node 안에서 같은 target으로 중복 call edge가 없는가
 
-이 검증을 통과한 fixture만 `engine.py`로 전달된다. 따라서 `loader.py`는 잘못된 fixture 때문에 Rule R 결과가 왜곡되는 것을 막는 입력 검증 단계이다.
+이 검증을 통과한 fixture만 `engine.py`로 전달된다. 따라서 `loader.py`는 잘못된 fixture 때문에 CG-WL 결과가 왜곡되는 것을 막는 입력 검증 단계이다.
 
 ### 4.3 engine.py
 Axis 1 call-graph color refinement engine
@@ -300,14 +300,14 @@ Axis 1 call-graph color refinement engine
 - scored: 점수 산출 여부
 - calls: target, count
 
-`engine.py`는 fixture JSON으로 들어온 call graph를 받아서, 함수들을 호출 관계상 같은 role을 가진 그룹으로 나누는 Rule R strict baseline이다.
+`engine.py`는 fixture JSON으로 들어온 call graph를 받아서, 함수들을 호출 관계상 같은 role을 가진 그룹으로 나누는 CG-WL engine이다.
 
 #### 1단계: RelationGraphView
 관련 함수:
 ```python
 build_relation_graph_view(case)
 ```
-이 단계는 fixture의 call list를 Rule R이 쓰기 좋은 형태로 바꾼다.
+이 단계는 fixture의 call list를 CG-WL이 쓰기 좋은 형태로 바꾼다.
 
 fixture에는 각 node마다 아래와 같이 들어있다.
 ```json
@@ -349,7 +349,7 @@ incoming[B] = [(A, 5)]
 #### 2단계: initial color
 관련 함수:
 ```python
-make_initial_rule_r_colors(case, view)
+make_initial_cg_wl_colors(case, view)
 ```
 
 각 함수에 초기 색(color)를 주는 작업을 수행한다.
@@ -366,7 +366,7 @@ anchor는 각 함수마다 고유한 색을 설정.
 #### 3단계: Relation refinement
 관련 함수:
 ```python
-refine_rule_r_once(case, view, prev_colors)
+refine_cg_wl_once(case, view, prev_colors)
 ```
 
 engine의 핵심이다.
@@ -429,7 +429,7 @@ C    -> C:1
 #### 5단계: Fixpoint
 관련 함수:
 ```python
-run_strict_rule_r(case)
+run_cg_wl(case)
 same_partition(...)
 canonical_partition(...)
 ```
@@ -765,7 +765,7 @@ predicted cluster + ground truth -> predicted clusters / TP/FP/FN / Precision/Re
 1. fixture JSON 읽기
 2. ground truth JSON 읽기
 3. 두 universe가 같은지 검사
-4. Rule R engine 실행
+4. CG-WL engine 실행
 5. 모든 scored 함수 쌍을 비교
 6. P/R/F1/ARI 계산
 7. predicted clusters와 score 출력
@@ -880,11 +880,11 @@ ground truth의 모든 member id 집합
 이게 맞지 않으면 scoring을 중단한다.
 같은 함수 집합 위에서 predicted partition과 true partition을 비교해야 하기 때문이다.
 
-#### 4단계: Rule R engine 실행
+#### 4단계: CG-WL engine 실행
 핵심 함수:
 ```python
 score_case(fixture_path, ground_truth_path)
-run_strict_rule_r(case)
+run_cg_wl(case)
 ```
 
 `score_case()`가 scoring 전체의 중심 함수다.
@@ -899,11 +899,11 @@ gt = load_ground_truth(ground_truth_path)
 그 다음 engine을 실행한다.
 
 ```python
-result = run_strict_rule_r(case)
+result = run_cg_wl(case)
 ```
 
 여기서 `scores.py`는 engine 내부 알고리즘을 다시 구현하지 않는다.
-항상 `engine.py`의 `run_strict_rule_r()` 결과를 가져와서 채점한다.
+항상 `engine.py`의 `run_cg_wl()` 결과를 가져와서 채점한다.
 
 engine 결과 중 scoring에 필요한 것은 아래 map이다.
 
@@ -922,7 +922,7 @@ cluster_of = result.cluster_id_by_node
 ```
 
 이 map은 predicted partition이다.
-같은 cluster id를 가진 함수들은 Rule R이 같은 묶음으로 본 것이다.
+같은 cluster id를 가진 함수들은 CG-WL이 같은 묶음으로 본 것이다.
 
 #### 5단계: 모든 scored 함수 쌍 비교
 핵심 코드:
@@ -935,7 +935,7 @@ for a, b in combinations(scored_ids, 2):
 각 pair에 대해 두 가지 질문을 한다.
 
 ```
-1. Rule R은 두 함수를 같은 cluster로 묶었는가?
+1. CG-WL은 두 함수를 같은 cluster로 묶었는가?
 2. ground truth는 두 함수를 같은 origin으로 보는가?
 ```
 
