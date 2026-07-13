@@ -4,7 +4,7 @@ Rust monomorphized-function family grouping을 위한 v0 Python prototype이다.
 
 이 프로젝트는 stripped binary에서 추출했다고 가정한 함수 간 호출 관계 JSON을 입력으로 받아, Call-Graph Weisfeiler-Lehman(CG-WL) color refinement를 실행하고, 별도 ground truth JSON과 비교해 pairwise Precision/Recall/F1 및 ARI를 계산한다.
 
-현재 범위는 **Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority mode, std/library classifier는 아직 포함하지 않는다.
+현재 범위는 **rustc 기반 corpus compiler + Axis 1 relation-only grouping engine + scorer + radare2 기반 binary extractor 초안**이다. Axis 2/3/4 feature extraction, oracle/count-priority mode, std/library classifier는 아직 포함하지 않는다.
 
 파이프라인 각 단계의 상세 설계 설명은 [`docs/document.md`](docs/document.md)를 참고한다.
 
@@ -18,6 +18,8 @@ python3 -m pip install -r requirements.txt
 
 System tools:
 
+- `rustc`: required only by `compile.py`; the checked-in corpus was built and validated with rustc 1.93.1
+- `strip`: required only by `compile.py` and normally provided by GNU binutils
 - `radare2`: required only by `binary_extractor.py` and by the Python `r2pipe` backend
 - `nm`: required by `gt_extractor.py` and normally provided by GNU binutils
 
@@ -30,6 +32,20 @@ Dependency scope:
 ## Pipeline
 
 ```text
+src/*.rs
+  -> compile.py (rustc O3 / O3K)
+  -> gt_bin/*.gt.bin           non-stripped symbol side
+  -> bin/*.fixture.bin         stripped evaluation side (strip --strip-all)
+
+gt_bin/*.gt.bin
+  -> gt_extractor.py
+  -> ground_truth/*.gt.json
+  -> users/*.users.json
+
+bin/*.fixture.bin
+  -> binary_extractor.py + users/*.users.json
+  -> fixtures/*.fixture.json
+
 fixtures/*.fixture.json
   -> loader.py
   -> engine.py CG-WL
@@ -37,15 +53,6 @@ fixtures/*.fixture.json
   -> scores.py
   <- ground_truth/*.gt.json
   -> predicted clusters + symbols + TP / FP / FN + PR / RE / F1 / ARI
-
-gt_bin/*.gt.bin
-  -> gt_extractor.py
-  -> ground_truth/*.gt.json
-  -> users/*.users.json
-
-bin/*.bin
-  -> binary_extractor.py + users/*.users.json
-  -> fixtures/*.fixture.json
 ```
 
 중요한 분리:
@@ -60,14 +67,19 @@ bin/*.bin
 ```text
 model.py              dataclass model: Call, Node, Case
 loader.py             fixture JSON loader + validator
+compile.py            Rust source -> non-stripped gt_bin + stripped bin
 binary_extractor.py   radare2 call graph -> fixture JSON 초안
 gt_extractor.py       non-stripped symbol table -> ground truth JSON
 engine.py             Call-Graph Weisfeiler-Lehman color refinement engine
 scores.py             ground truth loader + pairwise scorer + CLI
 run_case.py           stem-based end-to-end pipeline runner
+src/                  Rust example sources (corpus 원본)
+bin/                  stripped evaluation binaries
+gt_bin/               non-stripped ground-truth binaries
 fixtures/             함수 관계 입력 JSON
 ground_truth/         origin label 정답 JSON
 users/                user function raw address JSON
+test/test_compile.py  rust-loss flag parity and command assembly regression
 test/test_engine.py   neighbor color multiset aggregation regression
 test/test_binary_extractor.py startup, tail-call, user address regression
 test/test_gt_extractor.py compiler symbol GT and user address regression
@@ -76,20 +88,22 @@ test/test_scores.py   fg01/fg02/fg03K/fg03 metric regression
 
 ## Binary Provenance
 
-The binaries under `bin/` and `gt_bin/` were built from the companion Rust
-artifact repository:
+The example sources under `src/` and the build recipe originate from the
+companion Rust artifact repository:
 
 - source repository: https://github.com/xdfyrj/rust-loss
 - source cases: `rust-loss/examples/family_graph_01.rs`,
-  `family_graph_02.rs`, `family_graph_03.rs`
-- build scripts: `rust-loss/scripts/build_case.sh` and
+  `family_graph_02.rs`, `family_graph_03.rs`, copied into `src/`
+- original build scripts: `rust-loss/scripts/build_case.sh` and
   `rust-loss/scripts/lib_build.sh`
 
-The `rust-loss` scripts call `rustc` directly, not Cargo, so compiler flags and
-artifact profiles are explicit. The authoritative per-binary metadata is in
-`rust-loss/artifacts/<profile>/<case>/build_info.txt`.
+The corpus binaries are now built source-to-end inside this repository by
+`compile.py`, which reproduces the `rust-loss` recipe exactly: direct `rustc`
+invocation, not Cargo, so compiler flags and profiles stay explicit.
+Per-binary metadata is written next to each output as
+`bin/*.build_info.txt` and `gt_bin/*.build_info.txt`.
 
-Observed build environment:
+Current build conditions:
 
 ```text
 OS/kernel: Linux XDFYRJ 6.6.114.1-microsoft-standard-WSL2 x86_64
@@ -98,6 +112,8 @@ rustc: rustc 1.93.1 (01f6ddf75 2026-02-11)
 LLVM: 21.1.8
 cargo: 1.93.1 (not used for artifact builds)
 binutils: GNU strip/objdump/nm 2.42
+edition: 2024
+crate-type: bin, crate-name = case
 ```
 
 Build profiles relevant to this repository:
@@ -120,8 +136,20 @@ O3KS:
 ```
 
 In this repository, `gt_bin/*.gt.bin` is the non-stripped symbol-bearing side
-used by `gt_extractor.py`, while `bin/*.bin` is the stripped evaluation side
-used by `binary_extractor.py`.
+used by `gt_extractor.py`, while `bin/*` is the stripped evaluation side
+used by `binary_extractor.py`. The evaluation build label (`O3S`/`O3KS`) names
+both files of a pair; the `gt_bin/` file itself is the non-stripped `O3`/`O3K`
+binary that the stripped binary was derived from.
+
+Reproducibility status of the checked-in corpus binaries under the reference
+toolchain (rustc 1.93.1, GNU strip 2.42):
+
+- `family_graph_01`, `family_graph_03` (O3S and O3KS): `compile.py` rebuilds
+  from `src/` are byte-identical to the checked-in `bin/` and `gt_bin/` files.
+- `family_graph_02`: the checked-in binaries were built from an earlier
+  revision of the source; the current `src/family_graph_02.rs` rebuild differs
+  in bytes but reproduces the same fixture relations, ground truth partition,
+  and scores.
 
 Canonical commands separate source case from build/profile:
 
@@ -134,6 +162,54 @@ The old `family_graph_03K` input binary name is retained only as a compatibility
 fallback for the O3KS artifact. Canonical generated JSON uses
 `family_graph_03.O3KS.*`, and the Rust crate symbol prefix remains
 `family_graph_03::`.
+
+## Corpus Compiler
+
+`compile.py`는 `src/*.rs` 하나에서 한 evaluation build의 바이너리 쌍을 만든다.
+
+```text
+src/<case>.rs
+  -> rustc (O3 or O3K profile)
+  -> gt_bin/<case>.<build>.gt.bin        non-stripped, gt_extractor.py 입력
+  -> strip --strip-all
+  -> bin/<case>.<build>.fixture.bin      stripped, binary_extractor.py 입력
+```
+
+Build-to-profile mapping:
+
+- `--build O3S` compiles the `O3` profile and strips the copy
+- `--build O3KS` compiles the `O3K` (`--cfg keep`) profile and strips the copy
+- other builds are rejected; `O0`/`O3`/`O3K` alone have no stripped
+  evaluation pair in this project
+
+Compilation rules:
+
+- flags are byte-identical to `rust-loss/scripts/lib_build.sh` `profile_flags()`;
+  `test/test_compile.py` locks this parity
+- `--crate-name` equals the case name, so the crate symbol prefix stays
+  `<case>::` for `gt_extractor.py`
+- `--edition 2024`, `--crate-type bin`
+- `rust-loss` emits `llvm-ir,asm,link`; `compile.py` emits `link` only.
+  Under the same rustc this produces a byte-identical binary, and the
+  `.ll`/`.s` mapping aids are out of this repository's scope
+- each output gets a `*.build_info.txt` sidecar with tool versions, flags,
+  and sha256 hashes of the source and binaries
+
+Example:
+
+```bash
+python3 compile.py family_graph_03
+python3 compile.py family_graph_03 --build O3KS
+```
+
+Equivalent explicit input/output form:
+
+```bash
+python3 compile.py src/family_graph_03.rs \
+  --build O3KS \
+  --gt-binary gt_bin/family_graph_03.O3KS.gt.bin \
+  --fixture-binary bin/family_graph_03.O3KS.fixture.bin
+```
 
 ## Fixture JSON
 
@@ -309,6 +385,7 @@ If `--build` is omitted, it defaults to `O3S`.
 
 Naming rules:
 
+- Rust source: `src/<case>.rs`
 - stripped/fixture binary: `bin/<case>.<build>.fixture.bin`, falling back to `bin/<case>.<build>.bin`
 - non-stripped GT binary: `gt_bin/<case>.<build>.gt.bin`
 - generated fixture JSON: `fixtures/<case>.<build>.fixture.json`
@@ -480,6 +557,13 @@ Notes:
 
 ## Commands
 
+Compile one case into its binary pair:
+
+```bash
+python3 compile.py family_graph_03
+python3 compile.py family_graph_03 --build O3KS
+```
+
 Run the engine on one fixture:
 
 ```bash
@@ -520,13 +604,13 @@ engine.py CG-WL     -> predicted clusters
 scores.py           -> predicted clusters + symbols + TP/FP/FN + PR/RE/F1/ARI report
 ```
 
-Regenerate the current family_graph stems:
+Regenerate the current family_graph stems source-to-end:
 
 ```bash
-python3 run_case.py family_graph_01
-python3 run_case.py family_graph_02
-python3 run_case.py family_graph_03
-python3 run_case.py family_graph_03 --build O3KS
+python3 compile.py family_graph_01 && python3 run_case.py family_graph_01
+python3 compile.py family_graph_02 && python3 run_case.py family_graph_02
+python3 compile.py family_graph_03 && python3 run_case.py family_graph_03
+python3 compile.py family_graph_03 --build O3KS && python3 run_case.py family_graph_03 --build O3KS
 ```
 
 Score one case:
@@ -602,11 +686,12 @@ python3 binary_extractor.py family_graph_03
 Run regression tests:
 
 ```bash
+python3 test/test_compile.py
 python3 test/test_engine.py
 python3 test/test_binary_extractor.py
 python3 test/test_gt_extractor.py
 python3 test/test_scores.py
-python3 -m py_compile binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py family_report.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py
+python3 -m py_compile compile.py binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py family_report.py test/test_compile.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py
 ```
 
 Current score regression targets:

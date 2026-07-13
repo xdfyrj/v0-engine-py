@@ -11,8 +11,8 @@ from typing import Any
 
 from paths import (
     DEFAULT_BUILD,
-    fixture_binary_for,
     fixture_json_for,
+    resolve_fixture_binary,
     resolve_users_json,
     split_case_build,
 )
@@ -623,7 +623,7 @@ def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser
     case, build = split_case_build(args.binary, args.build)
 
     if not Path(args.binary).exists():
-        args.binary = fixture_binary_for(case, build)
+        args.binary = resolve_fixture_binary(case, build)
 
     if not Path(args.binary).exists():
         parser.error(f"binary not found: {args.binary}")

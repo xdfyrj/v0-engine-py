@@ -8,11 +8,11 @@ from engine import CG_WL_MODES, DEFAULT_CG_WL_MODE, run_cg_wl
 from loader import load_case
 from paths import (
     DEFAULT_BUILD,
-    fixture_binary_for,
     fixture_json_for,
-    gt_binary_for,
     gt_json_for,
     prefix_for_case,
+    resolve_fixture_binary,
+    resolve_gt_binary,
     split_case_build,
     users_json_for,
 )
@@ -29,8 +29,8 @@ def run_fixture_only(fixture_path: str, mode: str) -> None:
 def run_pipeline(args: argparse.Namespace) -> None:
     case_from_stem, build = split_case_build(args.stem, args.build)
     case_name = args.case or case_from_stem
-    fixture_binary = args.fixture_binary or fixture_binary_for(case_from_stem, build)
-    gt_binary = args.gt_binary or gt_binary_for(case_from_stem, build)
+    fixture_binary = args.fixture_binary or resolve_fixture_binary(case_from_stem, build)
+    gt_binary = args.gt_binary or resolve_gt_binary(case_from_stem, build)
     fixture_json = args.fixture_json or fixture_json_for(case_name, build)
     gt_json = args.gt_json or gt_json_for(case_name, build)
     users_json = args.users or users_json_for(case_name, build)

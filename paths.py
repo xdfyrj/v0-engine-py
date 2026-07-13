@@ -31,6 +31,7 @@ def split_case_build(
         ".users.json",
         ".bin",
         ".json",
+        ".rs",
     ),
 ) -> tuple[str, str]:
     stem = strip_known_suffix(value, suffixes)
@@ -77,7 +78,19 @@ def _legacy_input_stems(case: str, build: str) -> list[str]:
     return stems
 
 
+def source_rs_for(case: str) -> str:
+    return f"src/{case}.rs"
+
+
 def fixture_binary_for(case: str, build: str) -> str:
+    return f"bin/{output_stem(case, build)}.fixture.bin"
+
+
+def gt_binary_for(case: str, build: str) -> str:
+    return f"gt_bin/{output_stem(case, build)}.gt.bin"
+
+
+def resolve_fixture_binary(case: str, build: str) -> str:
     stem = output_stem(case, build)
     options = [
         f"bin/{stem}.fixture.bin",
@@ -91,9 +104,8 @@ def fixture_binary_for(case: str, build: str) -> str:
     return first_existing(options)
 
 
-def gt_binary_for(case: str, build: str) -> str:
-    stem = output_stem(case, build)
-    options = [f"gt_bin/{stem}.gt.bin"]
+def resolve_gt_binary(case: str, build: str) -> str:
+    options = [gt_binary_for(case, build)]
     for legacy_stem in _legacy_input_stems(case, build):
         options.append(f"gt_bin/{legacy_stem}.gt.bin")
     return first_existing(options)

@@ -12,9 +12,9 @@ from typing import Any
 
 from paths import (
     DEFAULT_BUILD,
-    gt_binary_for,
     gt_json_for,
     prefix_for_case,
+    resolve_gt_binary,
     split_case_build,
     users_json_for,
 )
@@ -310,7 +310,7 @@ def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser
     case, build = split_case_build(args.binary, args.build)
 
     if not Path(args.binary).exists():
-        args.binary = gt_binary_for(case, build)
+        args.binary = resolve_gt_binary(case, build)
     args.output = args.output or gt_json_for(case, build)
     args.users = args.users or users_json_for(case, build)
     args.case = args.case or case
