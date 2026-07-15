@@ -14,17 +14,18 @@
 //  (3) arg-shape: Wide(24바이트)는 값 전달이 메모리/sret 로 내려가 같은 family 안에서도
 //      인자/반환 ABI 가 i32 와 갈린다. "인자는 부드러운 조건" 조항을 시험한다.
 //
-// 의도한 정답 (자연 O3 생존분에 한함):
-//   G_ra  = { recurse_alpha::<i32>,  recurse_alpha::<Wide>  }   자기 호출 1회
-//   G_rb  = { recurse_beta::<i32>,   recurse_beta::<Wide>   }   자기 호출 2회
-//   G_pa  = { process_alpha::<i32>,  process_alpha::<Wide>  }   루프, G_ra 호출
-//   G_pb  = { process_beta::<i32>,   process_beta::<Wide>   }   루프, G_rb 호출
-//   G_cra = { c_recurse_alpha_i32,   c_recurse_alpha_wide   }   G_ra 와 Axis-1 동형인 별개 origin
-//   G_cpa = { c_process_alpha_i32,   c_process_alpha_wide   }   G_pa 와 Axis-1 동형인 별개 origin
+// 의도한 정답 origin (자연 O3 생존분에 한함):
+//   G_ra = { recurse_alpha::<i32>, recurse_alpha::<Wide> }
+//   G_rb = { recurse_beta::<i32>, recurse_beta::<Wide> }
+//   G_pa = { process_alpha::<i32>, process_alpha::<Wide> }
+//   G_pb = { process_beta::<i32>, process_beta::<Wide> }
+//   c_recurse_alpha_i32, c_recurse_alpha_wide,
+//   c_process_alpha_i32, c_process_alpha_wide는 각각 별도 singleton origin이다.
 //
 // CG-WL 예상 결과:
-//   - G_rb, G_pb 분리(precision 성공)
-//   - G_ra+G_cra 합쳐짐, G_pa+G_cpa 합쳐짐(relation-only 비식별 사례)
+//   - G_rb와 G_pb는 각각 두 instance가 묶인다.
+//   - G_ra와 대응하는 concrete singleton 두 개가 한 cluster로 합쳐진다.
+//   - G_pa와 대응하는 concrete singleton 두 개가 한 cluster로 합쳐진다.
 //
 // 생존 게이트(먼저 확인): O3/O3S 빌드 후 process_alpha/process_beta/c_process_alpha 가
 //   독립 함수로 남았는지 확인. 여전히 인라인되면 main 호출을 타입당 3회로 늘리거나

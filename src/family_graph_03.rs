@@ -1,36 +1,3 @@
-// family_graph_03.rs  (v2 — 비재귀 생존 수정)
-//
-// 이전 버전 문제: outer 만 생존, inner/decoy 는 인라인.
-//   원인 (1) 크기가 지배적이다 — 작은 함수는 호출 site 가 여럿이어도 흡수된다.
-//        (2) inner 는 호출자가 outer 하나뿐 — 단일 호출자 함수는 인라인된다.
-// 수정: 비재귀 생존의 두 레버를 둘 다 쓴다.
-//   (1) 큰 본체(함수마다 여러 개의 루프).
-//   (2) 공유 helper `share` 를 *서로 다른* 두 driver(drive_x, drive_y)가 호출(호출자 2개).
-//
-// 목적(불변): fg02 가 못 한 recall(타입 인스턴스를 *관계만으로* 잇기)을, 재귀 없이, noise 속에서.
-//
-// 설계
-//  - share<T>: 큰 leaf looper(3중 루프). drive_x(x2) + drive_y(x3) 가 호출 => 호출자 2개 + 큼 => 생존.
-//  - drive_x<T>: 큰 looper(2중 루프) + share x2.   callee 서명 {share-grp: 2}
-//  - drive_y<T>: 큰 looper(2중 루프) + share x3.   callee 서명 {share-grp: 3}
-//  - recall: drive_x::<T> 들은 {share-grp:2} 로, share::<T> 들은 caller {dx:2, dy:3} 로 이어진다.
-//  - precision: drive_x(share x2) vs drive_y(share x3) 는 호출 횟수로 갈린다(self-call 없이).
-//  - noise: decoy_a/decoy_b 는 큰 leaf looper 지만 main 이 호출(가족은 driver 가 share 호출).
-//           => caller(main vs driver)로 share 가족에서 배제되어야 한다.
-//
-// 의도한 정답(자연 O3 생존분):
-//   G_dx = {drive_x::<i32/f64/Wide>}   callee {share-grp: 2}
-//   G_dy = {drive_y::<i32/f64/Wide>}   callee {share-grp: 3}
-//   G_sh = {share::<i32/f64/Wide>}     leaf, caller {drive_x-grp: 2, drive_y-grp: 3}
-//   noise = {decoy_a}(i32), {decoy_b}(f64)   leaf, caller main (가족 아님)
-//
-// CG-WL 예상: G_dx/G_dy/G_sh 가 타입 발산을 넘어 복원(recall), dx/dy 가 횟수로 갈림(precision),
-//   decoy 는 caller 로 배제(noise). decoy_a/decoy_b 가 서로 합쳐지면 "관계만으론 callee 없는
-//   두 leaf 를 못 가른다"는 한계로 기록.
-//
-// 생존 게이트(먼저): share/drive_x/drive_y/decoy_* 가 독립 함수로 남는지 확인.
-//   여전히 죽으면 본체에 루프를 더하거나(크기↑), share 를 부르는 driver 를 셋으로 늘린다(호출자↑).
-
 #![allow(unexpected_cfgs)]
 
 use std::hint::black_box;
