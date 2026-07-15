@@ -259,7 +259,7 @@ def as_markdown(rows: list[dict[str, Any]], headers: list[str]) -> str:
 
 def write_csv(path: Path, rows: list[dict[str, Any]], headers: list[str]) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=headers)
+        writer = csv.DictWriter(f, fieldnames=headers, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

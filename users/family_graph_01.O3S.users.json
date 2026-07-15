@@ -2,7 +2,7 @@
   "case": "family_graph_01",
   "build": "O3S",
   "schema_version": 1,
-  "source": "gt_bin/family_graph_01.gt.bin",
+  "source": "gt_bin/family_graph_01.O3S.gt.bin",
   "prefix": "family_graph_01::",
   "addresses": [
     "0x13e20",

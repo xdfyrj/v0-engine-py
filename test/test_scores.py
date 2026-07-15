@@ -1,39 +1,167 @@
-# test/test_scores.py
-#
-# baseline 회귀: 네 사례의 (P, R, F1, ARI)가 compiler-derived auto-GT
-# 기준으로 고정되는지 확인한다.
-# 기준값:
-#   family_graph_01 O3S   P=1.00 R=1.00 F1=1.00 ARI=1.00
-#   family_graph_02 O3S   P=0.29 R=1.00 F1=0.44 ARI=0.39
-#   family_graph_03 O3KS  P=0.94 R=1.00 F1=0.97 ARI=0.96
-#   family_graph_03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
+# Exact V0 baseline regression for the four canonical builds.
 
 import os
 import sys
+from itertools import combinations
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scores import score_case
+from build_manifest import load_and_verify_manifest, sha256_file
+from paths import build_manifest_for, fixture_json_for, gt_json_for
+from scores import load_ground_truth, score_case
+
 
 CASES = [
-    ("fixtures/family_graph_01.O3S.fixture.json",  "ground_truth/family_graph_01.O3S.gt.json",  (1.00, 1.00, 1.00, 1.00)),
-    ("fixtures/family_graph_02.O3S.fixture.json",  "ground_truth/family_graph_02.O3S.gt.json",  (0.29, 1.00, 0.44, 0.39)),
-    ("fixtures/family_graph_03.O3KS.fixture.json", "ground_truth/family_graph_03.O3KS.gt.json", (0.94, 1.00, 0.97, 0.96)),
-    ("fixtures/family_graph_03.O3S.fixture.json",  "ground_truth/family_graph_03.O3S.gt.json",  (0.80, 0.40, 0.53, 0.49)),
+    {
+        "case": "family_graph_01",
+        "build": "O3S",
+        "source_sha256": "09fb7950f565fb81ab9bb980270bc8b15ec39e538bca7d6d1ae7b704a9721a6c",
+        "gt_sha256": "2e711d8d71a0b4a7289b0af3996ee66aa47d20908c7eed193ba728326df7ba36",
+        "fixture_sha256": "a90ab8a65b2e826359060f1bd3306a8dff0e2a3a0a0f71f4e3babc53c61a1248",
+        "origin_sizes": {"shared_recursive": 3, "process": 3},
+        "rounds": 1,
+        "counts": (6, 0, 0, 9),
+        "metrics": (1.00, 1.00, 1.00, 1.00),
+        "clusters": (
+            ("FUN_00113e20", "FUN_00113f00", "FUN_00113f80"),
+            ("FUN_00114460", "FUN_00114640", "FUN_00114880"),
+        ),
+    },
+    {
+        "case": "family_graph_02",
+        "build": "O3S",
+        "source_sha256": "ee46b32e80732e0226b3f443d3aac63d712bf1e19c625b155beb14098f7d60e6",
+        "gt_sha256": "41f5d14d4f2901ddc2477ee721aef780cfbe575427ac994e2a1dc9cbea7830fe",
+        "fixture_sha256": "5b0a52d43cf71abe089ef29cc1047dca705b1bfcc1921ee94648f444afac88e5",
+        "origin_sizes": {
+            "process_beta": 2,
+            "recurse_beta": 2,
+            "process_alpha": 2,
+            "recurse_alpha": 2,
+            "c_process_alpha_i32": 1,
+            "c_recurse_alpha_i32": 1,
+            "c_process_alpha_wide": 1,
+            "c_recurse_alpha_wide": 1,
+        },
+        "rounds": 2,
+        "counts": (4, 10, 0, 52),
+        "metrics": (0.29, 1.00, 0.44, 0.39),
+        "clusters": (
+            ("FUN_00113fd0", "FUN_001140f0"),
+            ("FUN_00114350", "FUN_001144d0"),
+            ("FUN_00114590", "FUN_001147f0", "FUN_00114ac0", "FUN_00114c70"),
+            ("FUN_00114910", "FUN_001149a0", "FUN_00114be0", "FUN_00114ee0"),
+        ),
+    },
+    {
+        "case": "family_graph_03",
+        "build": "O3S",
+        "source_sha256": "f619cb2cf6b96756592c955895dcef822081333d42c018fc5b9c5f7e204a8d4e",
+        "gt_sha256": "2060d5ff413141c149a0aae9cd1e509b66ff0475fc1fa2f422fac6eae8c876ed",
+        "fixture_sha256": "b7dae1bd03e32904261af87f01fe6a0e0f09f37c5e050dd9db6be848b2be7d04",
+        "origin_sizes": {
+            "share": 3,
+            "leaf_p": 2,
+            "decoy_a": 1,
+            "decoy_b": 1,
+            "drive_x": 3,
+            "drive_y": 3,
+        },
+        "rounds": 2,
+        "counts": (4, 1, 6, 67),
+        "metrics": (0.80, 0.40, 0.53, 0.49),
+        "clusters": (
+            ("FUN_00114690", "FUN_00114a10"),
+            ("FUN_00114d70",),
+            ("FUN_00115260", "FUN_001154d0"),
+            ("FUN_001156e0", "FUN_001157e0"),
+            ("FUN_00115960", "FUN_00115bb0"),
+            ("FUN_00115e70",),
+            ("FUN_00116000", "FUN_00116330"),
+            ("FUN_00116590",),
+        ),
+    },
+    {
+        "case": "family_graph_03",
+        "build": "O3KS",
+        "source_sha256": "f619cb2cf6b96756592c955895dcef822081333d42c018fc5b9c5f7e204a8d4e",
+        "gt_sha256": "f4db880c136e319c8fa4f3368e94fd473be1c07c27cb881b45e2dd8ee030a8a0",
+        "fixture_sha256": "eef1d556460cf8fe98d77348a113b152f8a70e7ccfeb49532d2662895a19dfd9",
+        "origin_sizes": {
+            "share": 3,
+            "leaf_p": 3,
+            "leaf_q": 3,
+            "decoy_a": 1,
+            "decoy_b": 1,
+            "drive_x": 3,
+            "drive_y": 3,
+        },
+        "rounds": 2,
+        "counts": (15, 1, 0, 120),
+        "metrics": (0.94, 1.00, 0.97, 0.96),
+        "clusters": (
+            ("FUN_00114720", "FUN_001148e0", "FUN_00114a30"),
+            ("FUN_00114b20", "FUN_00114d90", "FUN_00114ef0"),
+            ("FUN_00115100", "FUN_00115250", "FUN_00115440"),
+            ("FUN_00115680", "FUN_00115780"),
+            ("FUN_00115900", "FUN_00115b50", "FUN_00115e10"),
+            ("FUN_00115fa0", "FUN_001162d0", "FUN_00116530"),
+        ),
+    },
 ]
 
 
 def main() -> int:
     all_ok = True
-    for fixture, gt, expected in CASES:
-        p = score_case(fixture, gt).pairwise
-        got = (round(p.precision, 2), round(p.recall, 2),
-               round(p.f1, 2), round(p.ari, 2))
-        ok = got == expected
+
+    for expected in CASES:
+        case = expected["case"]
+        build = expected["build"]
+        verified = load_and_verify_manifest(
+            build_manifest_for(case, build),
+            expected_case=case,
+            expected_build=build,
+        )
+        report = score_case(fixture_json_for(case, build), gt_json_for(case, build))
+        gt = load_ground_truth(gt_json_for(case, build))
+
+        origin_sizes = {group.origin: len(group.members) for group in gt.origins}
+        counts = (
+            report.pairwise.tp,
+            report.pairwise.fp,
+            report.pairwise.fn,
+            report.pairwise.tn,
+        )
+        metrics = tuple(round(value, 2) for value in (
+            report.pairwise.precision,
+            report.pairwise.recall,
+            report.pairwise.f1,
+            report.pairwise.ari,
+        ))
+        candidate_count = sum(len(cluster) for cluster in report.clusters)
+        pair_count = sum(1 for _ in combinations(range(candidate_count), 2))
+
+        checks = {
+            "source hash": sha256_file(verified.source) == expected["source_sha256"],
+            "GT binary hash": sha256_file(verified.non_stripped_binary) == expected["gt_sha256"],
+            "fixture binary hash": sha256_file(verified.stripped_binary) == expected["fixture_sha256"],
+            "origin census": origin_sizes == expected["origin_sizes"],
+            "rounds": report.rounds == expected["rounds"],
+            "pair counts": counts == expected["counts"],
+            "pair total": pair_count == sum(counts),
+            "metrics": metrics == expected["metrics"],
+            "clusters": report.clusters == expected["clusters"],
+        }
+        failed = [name for name, ok in checks.items() if not ok]
+        ok = not failed
         all_ok = all_ok and ok
-        tag = "PASS" if ok else f"FAIL (expected {expected})"
-        print(f"{fixture:28s} P={got[0]:.2f} R={got[1]:.2f} "
-              f"F1={got[2]:.2f} ARI={got[3]:.2f}  {tag}")
+        tag = "PASS" if ok else f"FAIL ({', '.join(failed)})"
+        print(
+            f"{case}/{build}: n={candidate_count} TP={counts[0]} FP={counts[1]} "
+            f"FN={counts[2]} TN={counts[3]} PR={metrics[0]:.2f} "
+            f"RE={metrics[1]:.2f} F1={metrics[2]:.2f} ARI={metrics[3]:.2f} {tag}"
+        )
+
     print("ALL PASS" if all_ok else "SOME FAILED")
     return 0 if all_ok else 1
 

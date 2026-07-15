@@ -557,15 +557,15 @@ infer_build(binary_path)
 
 예:
 ```
-gt_bin/family_graph_01.gt.bin
-gt_bin/family_graph_03K.gt.bin
+gt_bin/family_graph_01.O3S.gt.bin
+gt_bin/family_graph_03.O3KS.gt.bin
 ```
 
 따라서 별도 option을 주지 않아도 아래 값을 추론할 수 있다.
 
 ```
-family_graph_01.gt.bin  -> case=fg01, build=O3S,  prefix=family_graph_01::
-family_graph_03K.gt.bin -> case=fg03, build=O3KS, prefix=family_graph_03::
+family_graph_01.O3S.gt.bin  -> case=family_graph_01, build=O3S,  prefix=family_graph_01::
+family_graph_03.O3KS.gt.bin -> case=family_graph_03, build=O3KS, prefix=family_graph_03::
 ```
 
 `prefix`가 중요한 이유는 user가 작성한 실험 함수만 골라야 하기 때문이다.

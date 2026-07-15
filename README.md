@@ -36,6 +36,7 @@ src/*.rs
   -> compile.py (rustc O3 / O3K)
   -> gt_bin/*.gt.bin           non-stripped symbol side
   -> bin/*.fixture.bin         stripped evaluation side (strip --strip-all)
+  -> build_info/*.json         source/toolchain/binary-pair manifest
 
 gt_bin/*.gt.bin
   -> gt_extractor.py
@@ -100,8 +101,9 @@ companion Rust artifact repository:
 The corpus binaries are now built source-to-end inside this repository by
 `compile.py`, which reproduces the `rust-loss` recipe exactly: direct `rustc`
 invocation, not Cargo, so compiler flags and profiles stay explicit.
-Per-binary metadata is written next to each output as
-`bin/*.build_info.txt` and `gt_bin/*.build_info.txt`.
+A single build manifest under `build_info/` records the source, compiler,
+strip command, target, and hashes of both binaries. `run_case.py` verifies this
+manifest before extracting any JSON.
 
 Current build conditions:
 
@@ -141,15 +143,10 @@ used by `binary_extractor.py`. The evaluation build label (`O3S`/`O3KS`) names
 both files of a pair; the `gt_bin/` file itself is the non-stripped `O3`/`O3K`
 binary that the stripped binary was derived from.
 
-Reproducibility status of the checked-in corpus binaries under the reference
-toolchain (rustc 1.93.1, GNU strip 2.42):
-
-- `family_graph_01`, `family_graph_03` (O3S and O3KS): `compile.py` rebuilds
-  from `src/` are byte-identical to the checked-in `bin/` and `gt_bin/` files.
-- `family_graph_02`: the checked-in binaries were built from an earlier
-  revision of the source; the current `src/family_graph_02.rs` rebuild differs
-  in bytes but reproduces the same fixture relations, ground truth partition,
-  and scores.
+The checked-in canonical corpus consists of four builds generated from the
+current `src/`: family_graph_01/O3S, family_graph_02/O3S,
+family_graph_03/O3S, and family_graph_03/O3KS. The manifest for each build is
+the authority for its source and binary hashes.
 
 Canonical commands separate source case from build/profile:
 
@@ -158,10 +155,8 @@ case  = family_graph_03
 build = O3S | O3KS
 ```
 
-The old `family_graph_03K` input binary name is retained only as a compatibility
-fallback for the O3KS artifact. Canonical generated JSON uses
-`family_graph_03.O3KS.*`, and the Rust crate symbol prefix remains
-`family_graph_03::`.
+Canonical generated files use `family_graph_03.O3KS.*`, while the Rust crate
+symbol prefix remains `family_graph_03::`.
 
 ## Corpus Compiler
 
@@ -173,6 +168,7 @@ src/<case>.rs
   -> gt_bin/<case>.<build>.gt.bin        non-stripped, gt_extractor.py 입력
   -> strip --strip-all
   -> bin/<case>.<build>.fixture.bin      stripped, binary_extractor.py 입력
+  -> build_info/<case>.<build>.json      검증용 build manifest
 ```
 
 Build-to-profile mapping:
@@ -192,8 +188,8 @@ Compilation rules:
 - `rust-loss` emits `llvm-ir,asm,link`; `compile.py` emits `link` only.
   Under the same rustc this produces a byte-identical binary, and the
   `.ll`/`.s` mapping aids are out of this repository's scope
-- each output gets a `*.build_info.txt` sidecar with tool versions, flags,
-  and sha256 hashes of the source and binaries
+- one JSON manifest records `rustc -vV`, tool paths and commands, flags,
+  target, and SHA-256 hashes of the source and both binaries
 
 Example:
 
@@ -208,7 +204,8 @@ Equivalent explicit input/output form:
 python3 compile.py src/family_graph_03.rs \
   --build O3KS \
   --gt-binary gt_bin/family_graph_03.O3KS.gt.bin \
-  --fixture-binary bin/family_graph_03.O3KS.fixture.bin
+  --fixture-binary bin/family_graph_03.O3KS.fixture.bin \
+  --manifest build_info/family_graph_03.O3KS.json
 ```
 
 ## Fixture JSON
@@ -386,30 +383,28 @@ If `--build` is omitted, it defaults to `O3S`.
 Naming rules:
 
 - Rust source: `src/<case>.rs`
-- stripped/fixture binary: `bin/<case>.<build>.fixture.bin`, falling back to `bin/<case>.<build>.bin`
+- stripped/fixture binary: `bin/<case>.<build>.fixture.bin`
 - non-stripped GT binary: `gt_bin/<case>.<build>.gt.bin`
+- build manifest: `build_info/<case>.<build>.json`
 - generated fixture JSON: `fixtures/<case>.<build>.fixture.json`
 - generated ground truth JSON: `ground_truth/<case>.<build>.gt.json`
 - generated user address JSON: `users/<case>.<build>.users.json`
-
-Compatibility fallback for current checked-in binaries:
-
-- `build=O3S` may read `bin/<case>.bin` and `gt_bin/<case>.gt.bin`
-- `build=O3KS` may read `bin/<case>K.bin` and `gt_bin/<case>K.gt.bin`
 
 Example:
 
 ```text
 family_graph_03 --build O3S
-  -> bin/family_graph_03.bin
-  -> gt_bin/family_graph_03.gt.bin
+  -> bin/family_graph_03.O3S.fixture.bin
+  -> gt_bin/family_graph_03.O3S.gt.bin
+  -> build_info/family_graph_03.O3S.json
   -> fixtures/family_graph_03.O3S.fixture.json
   -> ground_truth/family_graph_03.O3S.gt.json
   -> users/family_graph_03.O3S.users.json
 
 family_graph_03 --build O3KS
-  -> bin/family_graph_03K.bin
-  -> gt_bin/family_graph_03K.gt.bin
+  -> bin/family_graph_03.O3KS.fixture.bin
+  -> gt_bin/family_graph_03.O3KS.gt.bin
+  -> build_info/family_graph_03.O3KS.json
   -> fixtures/family_graph_03.O3KS.fixture.json
   -> ground_truth/family_graph_03.O3KS.gt.json
   -> users/family_graph_03.O3KS.users.json
@@ -535,7 +530,7 @@ python3 binary_extractor.py family_graph_03
 Equivalent explicit input/output form:
 
 ```bash
-python3 binary_extractor.py bin/family_graph_03.bin fixtures/family_graph_03.O3S.fixture.json \
+python3 binary_extractor.py bin/family_graph_03.O3S.fixture.bin fixtures/family_graph_03.O3S.fixture.json \
   --build O3S \
   --users users/family_graph_03.O3S.users.json
 ```
@@ -543,7 +538,7 @@ python3 binary_extractor.py bin/family_graph_03.bin fixtures/family_graph_03.O3S
 If auto-detection fails, inspect radare2 functions and pass `--root` manually:
 
 ```bash
-python3 binary_extractor.py bin/family_graph_01.bin --list-functions
+python3 binary_extractor.py bin/family_graph_01.O3S.fixture.bin --list-functions
 ```
 
 Notes:
@@ -597,6 +592,7 @@ python3 run_case.py family_graph_03 --all-modes
 This executes:
 
 ```text
+build_info manifest -> source/GT binary/fixture binary hash validation
 gt_extractor.py     -> ground_truth/family_graph_03.O3S.gt.json
 gt_extractor.py     -> users/family_graph_03.O3S.users.json
 binary_extractor.py -> fixtures/family_graph_03.O3S.fixture.json

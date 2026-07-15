@@ -1,0 +1,91 @@
+case,build,mode,from_round,member,origin,previous_class,out_color_multiset,in_color_multiset,used_signature,next_class,partition_changed
+family_graph_01,O3S,full,0,FUN_00113e20,shared_recursive,R0C1,-,R0C2*5; anchor:root*2,prev=R0C1; out=-; in=R0C2*5; anchor:root*2,R1C1,False
+family_graph_01,O3S,full,0,FUN_00113f00,shared_recursive,R0C1,-,R0C2*5; anchor:root*2,prev=R0C1; out=-; in=R0C2*5; anchor:root*2,R1C1,False
+family_graph_01,O3S,full,0,FUN_00113f80,shared_recursive,R0C1,-,R0C2*5; anchor:root*2,prev=R0C1; out=-; in=R0C2*5; anchor:root*2,R1C1,False
+family_graph_01,O3S,full,0,FUN_00114460,process,R0C2,R0C1*5,anchor:root*2,prev=R0C2; out=R0C1*5; in=anchor:root*2,R1C2,False
+family_graph_01,O3S,full,0,FUN_00114640,process,R0C2,R0C1*5,anchor:root*2,prev=R0C2; out=R0C1*5; in=anchor:root*2,R1C2,False
+family_graph_01,O3S,full,0,FUN_00114880,process,R0C2,R0C1*5,anchor:root*2,prev=R0C2; out=R0C1*5; in=anchor:root*2,R1C2,False
+family_graph_02,O3S,full,0,FUN_00113fd0,process_beta,R0C1,R0C2*5,anchor:root*2,prev=R0C1; out=R0C2*5; in=anchor:root*2,R1C1,True
+family_graph_02,O3S,full,0,FUN_001140f0,process_beta,R0C1,R0C2*5,anchor:root*2,prev=R0C1; out=R0C2*5; in=anchor:root*2,R1C1,True
+family_graph_02,O3S,full,0,FUN_00114350,recurse_beta,R0C2,-,R0C1*5,prev=R0C2; out=-; in=R0C1*5,R1C2,True
+family_graph_02,O3S,full,0,FUN_001144d0,recurse_beta,R0C2,-,R0C1*5,prev=R0C2; out=-; in=R0C1*5,R1C2,True
+family_graph_02,O3S,full,0,FUN_00114590,process_alpha,R0C1,R0C3*5,anchor:root*2,prev=R0C1; out=R0C3*5; in=anchor:root*2,R1C3,True
+family_graph_02,O3S,full,0,FUN_001147f0,process_alpha,R0C1,R0C3*5,anchor:root*2,prev=R0C1; out=R0C3*5; in=anchor:root*2,R1C3,True
+family_graph_02,O3S,full,0,FUN_00114910,recurse_alpha,R0C3,-,R0C1*5,prev=R0C3; out=-; in=R0C1*5,R1C4,True
+family_graph_02,O3S,full,0,FUN_001149a0,recurse_alpha,R0C3,-,R0C1*5,prev=R0C3; out=-; in=R0C1*5,R1C4,True
+family_graph_02,O3S,full,0,FUN_00114ac0,c_process_alpha_i32,R0C1,R0C3*5,anchor:root*2,prev=R0C1; out=R0C3*5; in=anchor:root*2,R1C3,True
+family_graph_02,O3S,full,0,FUN_00114be0,c_recurse_alpha_i32,R0C3,-,R0C1*5,prev=R0C3; out=-; in=R0C1*5,R1C4,True
+family_graph_02,O3S,full,0,FUN_00114c70,c_process_alpha_wide,R0C1,R0C3*5,anchor:root*2,prev=R0C1; out=R0C3*5; in=anchor:root*2,R1C3,True
+family_graph_02,O3S,full,0,FUN_00114ee0,c_recurse_alpha_wide,R0C3,-,R0C1*5,prev=R0C3; out=-; in=R0C1*5,R1C4,True
+family_graph_02,O3S,full,1,FUN_00113fd0,process_beta,R1C1,R1C2*5,anchor:root*2,prev=R1C1; out=R1C2*5; in=anchor:root*2,R2C1,False
+family_graph_02,O3S,full,1,FUN_001140f0,process_beta,R1C1,R1C2*5,anchor:root*2,prev=R1C1; out=R1C2*5; in=anchor:root*2,R2C1,False
+family_graph_02,O3S,full,1,FUN_00114350,recurse_beta,R1C2,-,R1C1*5,prev=R1C2; out=-; in=R1C1*5,R2C2,False
+family_graph_02,O3S,full,1,FUN_001144d0,recurse_beta,R1C2,-,R1C1*5,prev=R1C2; out=-; in=R1C1*5,R2C2,False
+family_graph_02,O3S,full,1,FUN_00114590,process_alpha,R1C3,R1C4*5,anchor:root*2,prev=R1C3; out=R1C4*5; in=anchor:root*2,R2C3,False
+family_graph_02,O3S,full,1,FUN_001147f0,process_alpha,R1C3,R1C4*5,anchor:root*2,prev=R1C3; out=R1C4*5; in=anchor:root*2,R2C3,False
+family_graph_02,O3S,full,1,FUN_00114910,recurse_alpha,R1C4,-,R1C3*5,prev=R1C4; out=-; in=R1C3*5,R2C4,False
+family_graph_02,O3S,full,1,FUN_001149a0,recurse_alpha,R1C4,-,R1C3*5,prev=R1C4; out=-; in=R1C3*5,R2C4,False
+family_graph_02,O3S,full,1,FUN_00114ac0,c_process_alpha_i32,R1C3,R1C4*5,anchor:root*2,prev=R1C3; out=R1C4*5; in=anchor:root*2,R2C3,False
+family_graph_02,O3S,full,1,FUN_00114be0,c_recurse_alpha_i32,R1C4,-,R1C3*5,prev=R1C4; out=-; in=R1C3*5,R2C4,False
+family_graph_02,O3S,full,1,FUN_00114c70,c_process_alpha_wide,R1C3,R1C4*5,anchor:root*2,prev=R1C3; out=R1C4*5; in=anchor:root*2,R2C3,False
+family_graph_02,O3S,full,1,FUN_00114ee0,c_recurse_alpha_wide,R1C4,-,R1C3*5,prev=R1C4; out=-; in=R1C3*5,R2C4,False
+family_graph_03,O3S,full,0,FUN_00114690,share,R0C1,R0C2*2,R0C1*5,prev=R0C1; out=R0C2*2; in=R0C1*5,R1C1,True
+family_graph_03,O3S,full,0,FUN_00114a10,share,R0C1,R0C2*2,R0C1*5,prev=R0C1; out=R0C2*2; in=R0C1*5,R1C1,True
+family_graph_03,O3S,full,0,FUN_00114d70,share,R0C2,-,R0C1*5,prev=R0C2; out=-; in=R0C1*5,R1C2,True
+family_graph_03,O3S,full,0,FUN_00115260,leaf_p,R0C2,-,R0C1*2,prev=R0C2; out=-; in=R0C1*2,R1C3,True
+family_graph_03,O3S,full,0,FUN_001154d0,leaf_p,R0C2,-,R0C1*2,prev=R0C2; out=-; in=R0C1*2,R1C3,True
+family_graph_03,O3S,full,0,FUN_001156e0,decoy_a,R0C2,-,anchor:root*2,prev=R0C2; out=-; in=anchor:root*2,R1C4,True
+family_graph_03,O3S,full,0,FUN_001157e0,decoy_b,R0C2,-,anchor:root*2,prev=R0C2; out=-; in=anchor:root*2,R1C4,True
+family_graph_03,O3S,full,0,FUN_00115960,drive_x,R0C1,R0C1*2,anchor:root*2,prev=R0C1; out=R0C1*2; in=anchor:root*2,R1C5,True
+family_graph_03,O3S,full,0,FUN_00115bb0,drive_x,R0C1,R0C1*2,anchor:root*2,prev=R0C1; out=R0C1*2; in=anchor:root*2,R1C5,True
+family_graph_03,O3S,full,0,FUN_00115e70,drive_x,R0C1,R0C2*2,anchor:root*2,prev=R0C1; out=R0C2*2; in=anchor:root*2,R1C6,True
+family_graph_03,O3S,full,0,FUN_00116000,drive_y,R0C1,R0C1*3,anchor:root*2,prev=R0C1; out=R0C1*3; in=anchor:root*2,R1C7,True
+family_graph_03,O3S,full,0,FUN_00116330,drive_y,R0C1,R0C1*3,anchor:root*2,prev=R0C1; out=R0C1*3; in=anchor:root*2,R1C7,True
+family_graph_03,O3S,full,0,FUN_00116590,drive_y,R0C1,R0C2*3,anchor:root*2,prev=R0C1; out=R0C2*3; in=anchor:root*2,R1C8,True
+family_graph_03,O3S,full,1,FUN_00114690,share,R1C1,R1C3*2,R1C5*2; R1C7*3,prev=R1C1; out=R1C3*2; in=R1C5*2; R1C7*3,R2C1,False
+family_graph_03,O3S,full,1,FUN_00114a10,share,R1C1,R1C3*2,R1C5*2; R1C7*3,prev=R1C1; out=R1C3*2; in=R1C5*2; R1C7*3,R2C1,False
+family_graph_03,O3S,full,1,FUN_00114d70,share,R1C2,-,R1C6*2; R1C8*3,prev=R1C2; out=-; in=R1C6*2; R1C8*3,R2C2,False
+family_graph_03,O3S,full,1,FUN_00115260,leaf_p,R1C3,-,R1C1*2,prev=R1C3; out=-; in=R1C1*2,R2C3,False
+family_graph_03,O3S,full,1,FUN_001154d0,leaf_p,R1C3,-,R1C1*2,prev=R1C3; out=-; in=R1C1*2,R2C3,False
+family_graph_03,O3S,full,1,FUN_001156e0,decoy_a,R1C4,-,anchor:root*2,prev=R1C4; out=-; in=anchor:root*2,R2C4,False
+family_graph_03,O3S,full,1,FUN_001157e0,decoy_b,R1C4,-,anchor:root*2,prev=R1C4; out=-; in=anchor:root*2,R2C4,False
+family_graph_03,O3S,full,1,FUN_00115960,drive_x,R1C5,R1C1*2,anchor:root*2,prev=R1C5; out=R1C1*2; in=anchor:root*2,R2C5,False
+family_graph_03,O3S,full,1,FUN_00115bb0,drive_x,R1C5,R1C1*2,anchor:root*2,prev=R1C5; out=R1C1*2; in=anchor:root*2,R2C5,False
+family_graph_03,O3S,full,1,FUN_00115e70,drive_x,R1C6,R1C2*2,anchor:root*2,prev=R1C6; out=R1C2*2; in=anchor:root*2,R2C6,False
+family_graph_03,O3S,full,1,FUN_00116000,drive_y,R1C7,R1C1*3,anchor:root*2,prev=R1C7; out=R1C1*3; in=anchor:root*2,R2C7,False
+family_graph_03,O3S,full,1,FUN_00116330,drive_y,R1C7,R1C1*3,anchor:root*2,prev=R1C7; out=R1C1*3; in=anchor:root*2,R2C7,False
+family_graph_03,O3S,full,1,FUN_00116590,drive_y,R1C8,R1C2*3,anchor:root*2,prev=R1C8; out=R1C2*3; in=anchor:root*2,R2C8,False
+family_graph_03,O3KS,full,0,FUN_00114720,share,R0C1,R0C2*3,R0C3*5,prev=R0C1; out=R0C2*3; in=R0C3*5,R1C1,True
+family_graph_03,O3KS,full,0,FUN_001148e0,share,R0C1,R0C2*3,R0C3*5,prev=R0C1; out=R0C2*3; in=R0C3*5,R1C1,True
+family_graph_03,O3KS,full,0,FUN_00114a30,share,R0C1,R0C2*3,R0C3*5,prev=R0C1; out=R0C2*3; in=R0C3*5,R1C1,True
+family_graph_03,O3KS,full,0,FUN_00114b20,leaf_p,R0C2,-,R0C1*2,prev=R0C2; out=-; in=R0C1*2,R1C2,True
+family_graph_03,O3KS,full,0,FUN_00114d90,leaf_p,R0C2,-,R0C1*2,prev=R0C2; out=-; in=R0C1*2,R1C2,True
+family_graph_03,O3KS,full,0,FUN_00114ef0,leaf_p,R0C2,-,R0C1*2,prev=R0C2; out=-; in=R0C1*2,R1C2,True
+family_graph_03,O3KS,full,0,FUN_00115100,leaf_q,R0C2,-,R0C1*1,prev=R0C2; out=-; in=R0C1*1,R1C3,True
+family_graph_03,O3KS,full,0,FUN_00115250,leaf_q,R0C2,-,R0C1*1,prev=R0C2; out=-; in=R0C1*1,R1C3,True
+family_graph_03,O3KS,full,0,FUN_00115440,leaf_q,R0C2,-,R0C1*1,prev=R0C2; out=-; in=R0C1*1,R1C3,True
+family_graph_03,O3KS,full,0,FUN_00115680,decoy_a,R0C2,-,anchor:root*2,prev=R0C2; out=-; in=anchor:root*2,R1C4,True
+family_graph_03,O3KS,full,0,FUN_00115780,decoy_b,R0C2,-,anchor:root*2,prev=R0C2; out=-; in=anchor:root*2,R1C4,True
+family_graph_03,O3KS,full,0,FUN_00115900,drive_x,R0C3,R0C1*2,anchor:root*2,prev=R0C3; out=R0C1*2; in=anchor:root*2,R1C5,True
+family_graph_03,O3KS,full,0,FUN_00115b50,drive_x,R0C3,R0C1*2,anchor:root*2,prev=R0C3; out=R0C1*2; in=anchor:root*2,R1C5,True
+family_graph_03,O3KS,full,0,FUN_00115e10,drive_x,R0C3,R0C1*2,anchor:root*2,prev=R0C3; out=R0C1*2; in=anchor:root*2,R1C5,True
+family_graph_03,O3KS,full,0,FUN_00115fa0,drive_y,R0C3,R0C1*3,anchor:root*2,prev=R0C3; out=R0C1*3; in=anchor:root*2,R1C6,True
+family_graph_03,O3KS,full,0,FUN_001162d0,drive_y,R0C3,R0C1*3,anchor:root*2,prev=R0C3; out=R0C1*3; in=anchor:root*2,R1C6,True
+family_graph_03,O3KS,full,0,FUN_00116530,drive_y,R0C3,R0C1*3,anchor:root*2,prev=R0C3; out=R0C1*3; in=anchor:root*2,R1C6,True
+family_graph_03,O3KS,full,1,FUN_00114720,share,R1C1,R1C2*2; R1C3*1,R1C5*2; R1C6*3,prev=R1C1; out=R1C2*2; R1C3*1; in=R1C5*2; R1C6*3,R2C1,False
+family_graph_03,O3KS,full,1,FUN_001148e0,share,R1C1,R1C2*2; R1C3*1,R1C5*2; R1C6*3,prev=R1C1; out=R1C2*2; R1C3*1; in=R1C5*2; R1C6*3,R2C1,False
+family_graph_03,O3KS,full,1,FUN_00114a30,share,R1C1,R1C2*2; R1C3*1,R1C5*2; R1C6*3,prev=R1C1; out=R1C2*2; R1C3*1; in=R1C5*2; R1C6*3,R2C1,False
+family_graph_03,O3KS,full,1,FUN_00114b20,leaf_p,R1C2,-,R1C1*2,prev=R1C2; out=-; in=R1C1*2,R2C2,False
+family_graph_03,O3KS,full,1,FUN_00114d90,leaf_p,R1C2,-,R1C1*2,prev=R1C2; out=-; in=R1C1*2,R2C2,False
+family_graph_03,O3KS,full,1,FUN_00114ef0,leaf_p,R1C2,-,R1C1*2,prev=R1C2; out=-; in=R1C1*2,R2C2,False
+family_graph_03,O3KS,full,1,FUN_00115100,leaf_q,R1C3,-,R1C1*1,prev=R1C3; out=-; in=R1C1*1,R2C3,False
+family_graph_03,O3KS,full,1,FUN_00115250,leaf_q,R1C3,-,R1C1*1,prev=R1C3; out=-; in=R1C1*1,R2C3,False
+family_graph_03,O3KS,full,1,FUN_00115440,leaf_q,R1C3,-,R1C1*1,prev=R1C3; out=-; in=R1C1*1,R2C3,False
+family_graph_03,O3KS,full,1,FUN_00115680,decoy_a,R1C4,-,anchor:root*2,prev=R1C4; out=-; in=anchor:root*2,R2C4,False
+family_graph_03,O3KS,full,1,FUN_00115780,decoy_b,R1C4,-,anchor:root*2,prev=R1C4; out=-; in=anchor:root*2,R2C4,False
+family_graph_03,O3KS,full,1,FUN_00115900,drive_x,R1C5,R1C1*2,anchor:root*2,prev=R1C5; out=R1C1*2; in=anchor:root*2,R2C5,False
+family_graph_03,O3KS,full,1,FUN_00115b50,drive_x,R1C5,R1C1*2,anchor:root*2,prev=R1C5; out=R1C1*2; in=anchor:root*2,R2C5,False
+family_graph_03,O3KS,full,1,FUN_00115e10,drive_x,R1C5,R1C1*2,anchor:root*2,prev=R1C5; out=R1C1*2; in=anchor:root*2,R2C5,False
+family_graph_03,O3KS,full,1,FUN_00115fa0,drive_y,R1C6,R1C1*3,anchor:root*2,prev=R1C6; out=R1C1*3; in=anchor:root*2,R2C6,False
+family_graph_03,O3KS,full,1,FUN_001162d0,drive_y,R1C6,R1C1*3,anchor:root*2,prev=R1C6; out=R1C1*3; in=anchor:root*2,R2C6,False
+family_graph_03,O3KS,full,1,FUN_00116530,drive_y,R1C6,R1C1*3,anchor:root*2,prev=R1C6; out=R1C1*3; in=anchor:root*2,R2C6,False
