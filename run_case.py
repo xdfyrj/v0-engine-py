@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
+from build_manifest import BUILD_TARGET, load_and_verify_manifest
 from engine import CG_WL_MODES, DEFAULT_CG_WL_MODE, run_cg_wl
 from loader import load_case
 from paths import (
     DEFAULT_BUILD,
+    build_manifest_for,
     fixture_json_for,
     gt_json_for,
     prefix_for_case,
-    resolve_fixture_binary,
-    resolve_gt_binary,
     split_case_build,
     users_json_for,
 )
@@ -29,8 +30,19 @@ def run_fixture_only(fixture_path: str, mode: str) -> None:
 def run_pipeline(args: argparse.Namespace) -> None:
     case_from_stem, build = split_case_build(args.stem, args.build)
     case_name = args.case or case_from_stem
-    fixture_binary = args.fixture_binary or resolve_fixture_binary(case_from_stem, build)
-    gt_binary = args.gt_binary or resolve_gt_binary(case_from_stem, build)
+    manifest_path = args.manifest or build_manifest_for(case_name, build)
+    verified = load_and_verify_manifest(
+        manifest_path,
+        expected_case=case_name,
+        expected_build=build,
+        expected_target=BUILD_TARGET,
+    )
+    fixture_binary = _validated_override(
+        "--fixture-binary", args.fixture_binary, verified.stripped_binary
+    )
+    gt_binary = _validated_override(
+        "--gt-binary", args.gt_binary, verified.non_stripped_binary
+    )
     fixture_json = args.fixture_json or fixture_json_for(case_name, build)
     gt_json = args.gt_json or gt_json_for(case_name, build)
     users_json = args.users or users_json_for(case_name, build)
@@ -38,6 +50,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     print(f"case: {case_name}")
     print(f"build: {build}")
+    print(f"build manifest: {manifest_path}")
+    print(f"build id: {verified.build_id}")
     print(f"fixture binary: {fixture_binary}")
     print(f"gt binary: {gt_binary}")
     print(f"fixture json: {fixture_json}")
@@ -163,6 +177,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fixture-binary", help="override stripped/fixture binary path")
     parser.add_argument("--gt-binary", help="override non-stripped GT binary path")
+    parser.add_argument("--manifest", help="override and verify build manifest path")
     parser.add_argument("--fixture-json", help="override generated fixture JSON path")
     parser.add_argument("--gt-json", help="override generated ground-truth JSON path")
     parser.add_argument("--users", help="override generated user address JSON path")
@@ -182,6 +197,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="score full, out, in, and out-in modes",
     )
     return parser
+
+
+def _validated_override(option: str, override: str | None, recorded: str) -> str:
+    if override is None:
+        return recorded
+    if Path(override).resolve() != Path(recorded).resolve():
+        raise ValueError(
+            f"{option} does not match the build manifest: {override!r} != {recorded!r}"
+        )
+    return recorded
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -90,6 +90,10 @@ def gt_binary_for(case: str, build: str) -> str:
     return f"gt_bin/{output_stem(case, build)}.gt.bin"
 
 
+def build_manifest_for(case: str, build: str) -> str:
+    return f"build_info/{output_stem(case, build)}.json"
+
+
 def resolve_fixture_binary(case: str, build: str) -> str:
     stem = output_stem(case, build)
     options = [

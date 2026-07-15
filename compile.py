@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
+from build_manifest import (
+    BUILD_MANIFEST_SCHEMA_VERSION,
+    BUILD_TARGET,
+    sha256_file,
+    write_manifest,
+)
 from paths import (
     DEFAULT_BUILD,
+    build_manifest_for,
     fixture_binary_for,
     gt_binary_for,
     source_rs_for,
@@ -19,6 +26,7 @@ from paths import (
 
 
 RUSTC_EDITION = "2024"
+RUSTC_TARGET = BUILD_TARGET
 STRIP_FLAGS = ["--strip-all"]
 
 # Exact per-profile rustc flags from rust-loss scripts/lib_build.sh.
@@ -76,6 +84,7 @@ def rustc_command(
         "--crate-type", "bin",
         "--crate-name", case,
         "--edition", RUSTC_EDITION,
+        "--target", RUSTC_TARGET,
         "--emit=link",
         "-o", output,
     ]
@@ -88,7 +97,7 @@ def compile_gt_binary(
     profile: str,
     output: str,
     rustc_tool: str,
-) -> None:
+) -> list[str]:
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = _temporary_path_for(path)
@@ -103,6 +112,7 @@ def compile_gt_binary(
         )
         _run_tool(command)
         os.replace(temporary, path)
+        return command
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -112,7 +122,7 @@ def derive_fixture_binary(
     gt_binary: str,
     output: str,
     strip_tool: str,
-) -> None:
+) -> list[str]:
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = _temporary_path_for(path)
@@ -120,8 +130,10 @@ def derive_fixture_binary(
     try:
         shutil.copyfile(gt_binary, temporary)
         shutil.copymode(gt_binary, temporary)
-        _run_tool([strip_tool, *STRIP_FLAGS, str(temporary)])
+        command = [strip_tool, *STRIP_FLAGS, str(temporary)]
+        _run_tool(command)
         os.replace(temporary, path)
+        return command
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -160,79 +172,107 @@ def _run_tool(command: list[str]) -> None:
         )
 
 
-def tool_version_line(tool: str) -> str:
+def tool_output(tool: str, *args: str) -> str:
     result = subprocess.run(
-        [tool, "--version"],
+        [tool, *args],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
-    return result.stdout.splitlines()[0] if result.stdout else "unknown"
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{tool} {' '.join(args)} failed with exit code {result.returncode}:\n"
+            f"{result.stdout.strip()}"
+        )
+    return result.stdout.strip()
 
 
-def sha256_file(path: str) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def tool_paths(tool: str) -> tuple[str, str]:
+    invoked = shutil.which(tool)
+    if invoked is None:
+        raise RuntimeError(f"{tool} executable was not found")
+    return invoked, str(Path(invoked).resolve())
 
 
-def build_info_path_for(binary_path: str) -> str:
-    return str(Path(binary_path).with_suffix("")) + ".build_info.txt"
+def rustc_binary_identity(rustc_tool: str) -> tuple[str, str]:
+    sysroot = tool_output(rustc_tool, "--print", "sysroot")
+    candidate = Path(sysroot) / "bin" / "rustc"
+    compiler_binary = candidate if candidate.is_file() else Path(tool_paths(rustc_tool)[1])
+    return sysroot, str(compiler_binary.resolve())
 
 
-def make_gt_build_info(
+def make_build_manifest(
     *,
     source: str,
-    case: str,
-    build: str,
-    profile: str,
-    output: str,
-    rustc_tool: str,
-) -> str:
-    lines = [
-        f"source={source}",
-        f"case={case}",
-        f"build={build}",
-        f"profile={profile}",
-        f"rustc={tool_version_line(rustc_tool)}",
-        f"flags={' '.join(PROFILE_FLAGS[profile])}",
-        f"crate_name={case}",
-        f"edition={RUSTC_EDITION}",
-        "emit=link",
-        f"source_sha256={sha256_file(source)}",
-        f"binary_sha256={sha256_file(output)}",
-        "role=non-stripped ground-truth symbol source",
-    ]
-    return "\n".join(lines) + "\n"
-
-
-def make_fixture_build_info(
-    *,
-    source: str,
+    source_sha256: str,
     case: str,
     build: str,
     profile: str,
     gt_binary: str,
-    output: str,
+    gt_sha256: str,
+    fixture_binary: str,
+    fixture_sha256: str,
+    rustc_tool: str,
+    rustc_command: list[str],
     strip_tool: str,
-) -> str:
-    lines = [
-        f"source={source}",
-        f"case={case}",
-        f"build={build}",
-        f"profile={profile}",
-        f"derived_from={gt_binary}",
-        f"strip={tool_version_line(strip_tool)}",
-        f"strip_flags={' '.join(STRIP_FLAGS)}",
-        f"source_binary_sha256={sha256_file(gt_binary)}",
-        f"binary_sha256={sha256_file(output)}",
-        "role=stripped fixture evaluation binary",
-    ]
-    return "\n".join(lines) + "\n"
+    strip_command: list[str],
+) -> dict:
+    rustc_invoked, rustc_resolved = tool_paths(rustc_tool)
+    rustc_sysroot, rustc_binary = rustc_binary_identity(rustc_tool)
+    strip_invoked, strip_resolved = tool_paths(strip_tool)
+    return {
+        "schema_version": BUILD_MANIFEST_SCHEMA_VERSION,
+        "build_id": uuid.uuid4().hex,
+        "case": case,
+        "build": build,
+        "profile": profile,
+        "target": RUSTC_TARGET,
+        "edition": RUSTC_EDITION,
+        "crate_name": case,
+        "source": {
+            "path": source,
+            "sha256": source_sha256,
+        },
+        "compiler": {
+            "invoked_path": rustc_invoked,
+            "resolved_path": rustc_resolved,
+            "sysroot": rustc_sysroot,
+            "compiler_binary_path": rustc_binary,
+            "verbose_version": tool_output(rustc_tool, "-vV"),
+            "flags": PROFILE_FLAGS[profile],
+            "command": rustc_command,
+        },
+        "strip": {
+            "invoked_path": strip_invoked,
+            "resolved_path": strip_resolved,
+            "version": tool_output(strip_tool, "--version"),
+            "flags": STRIP_FLAGS,
+            "command": strip_command,
+        },
+        "artifacts": {
+            "non_stripped": {
+                "path": gt_binary,
+                "sha256": gt_sha256,
+            },
+            "stripped": {
+                "path": fixture_binary,
+                "sha256": fixture_sha256,
+                "stripped_from_sha256": gt_sha256,
+            },
+        },
+    }
 
 
-def write_build_info(text: str, output_path: str) -> None:
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+def _publish_file(source: Path, output: str) -> None:
+    destination = Path(output)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = _temporary_path_for(destination)
+    try:
+        shutil.copyfile(source, temporary)
+        shutil.copymode(source, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def compile_case(args: argparse.Namespace) -> list[str]:
@@ -242,47 +282,55 @@ def compile_case(args: argparse.Namespace) -> list[str]:
     _require_tool(args.rustc_tool)
     _require_tool(args.strip_tool)
 
-    compile_gt_binary(
-        source=args.source,
-        case=args.case,
-        profile=profile,
-        output=args.gt_binary,
-        rustc_tool=args.rustc_tool,
-    )
-    derive_fixture_binary(
-        gt_binary=args.gt_binary,
-        output=args.fixture_binary,
-        strip_tool=args.strip_tool,
-    )
+    source_sha256 = sha256_file(args.source)
 
-    gt_info_path = build_info_path_for(args.gt_binary)
-    fixture_info_path = build_info_path_for(args.fixture_binary)
+    with tempfile.TemporaryDirectory(prefix=f"{args.case}.{args.build}.") as directory:
+        staging = Path(directory)
+        staged_gt = staging / "non-stripped.bin"
+        staged_fixture = staging / "stripped.bin"
+        staged_manifest = staging / "build.json"
 
-    write_build_info(
-        make_gt_build_info(
+        rustc_command_used = compile_gt_binary(
             source=args.source,
             case=args.case,
-            build=args.build,
             profile=profile,
-            output=args.gt_binary,
+            output=str(staged_gt),
             rustc_tool=args.rustc_tool,
-        ),
-        gt_info_path,
-    )
-    write_build_info(
-        make_fixture_build_info(
+        )
+        strip_command_used = derive_fixture_binary(
+            gt_binary=str(staged_gt),
+            output=str(staged_fixture),
+            strip_tool=args.strip_tool,
+        )
+
+        if sha256_file(args.source) != source_sha256:
+            raise RuntimeError("source changed while compilation was in progress")
+
+        gt_sha256 = sha256_file(staged_gt)
+        fixture_sha256 = sha256_file(staged_fixture)
+        manifest = make_build_manifest(
             source=args.source,
+            source_sha256=source_sha256,
             case=args.case,
             build=args.build,
             profile=profile,
             gt_binary=args.gt_binary,
-            output=args.fixture_binary,
+            gt_sha256=gt_sha256,
+            fixture_binary=args.fixture_binary,
+            fixture_sha256=fixture_sha256,
+            rustc_tool=args.rustc_tool,
+            rustc_command=rustc_command_used,
             strip_tool=args.strip_tool,
-        ),
-        fixture_info_path,
-    )
+            strip_command=strip_command_used,
+        )
+        write_manifest(manifest, staged_manifest)
 
-    return [args.gt_binary, args.fixture_binary, gt_info_path, fixture_info_path]
+        # The manifest is the completion marker and must be published last.
+        _publish_file(staged_gt, args.gt_binary)
+        _publish_file(staged_fixture, args.fixture_binary)
+        _publish_file(staged_manifest, args.manifest)
+
+    return [args.gt_binary, args.fixture_binary, args.manifest]
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -303,6 +351,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--gt-binary", help="override non-stripped output path")
     parser.add_argument("--fixture-binary", help="override stripped output path")
+    parser.add_argument("--manifest", help="override build manifest output path")
     parser.add_argument(
         "--rustc-tool",
         default="rustc",
@@ -329,6 +378,7 @@ def apply_cli_defaults(args: argparse.Namespace, parser: argparse.ArgumentParser
     args.build = build
     args.gt_binary = args.gt_binary or gt_binary_for(args.case, build)
     args.fixture_binary = args.fixture_binary or fixture_binary_for(args.case, build)
+    args.manifest = args.manifest or build_manifest_for(args.case, build)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -7,17 +7,25 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from build_manifest import (
+    BUILD_MANIFEST_SCHEMA_VERSION,
+    BUILD_TARGET,
+    load_and_verify_manifest,
+    sha256_file,
+    write_manifest,
+)
 from compile import (
     COMPILED_PROFILE_BY_BUILD,
     PROFILE_FLAGS,
     RUSTC_EDITION,
+    RUSTC_TARGET,
     STRIP_FLAGS,
-    build_info_path_for,
     compile_case,
     compiled_profile_for_build,
     derive_fixture_binary,
     rustc_command,
 )
+from paths import build_manifest_for
 
 
 # Exact flag strings from rust-loss scripts/lib_build.sh profile_flags().
@@ -44,6 +52,10 @@ def main() -> int:
 
     if RUSTC_EDITION != "2024":
         print(f"FAIL edition diverged from rust-loss: {RUSTC_EDITION}")
+        return 1
+
+    if RUSTC_TARGET != "x86_64-unknown-linux-gnu":
+        print(f"FAIL compilation target is not fixed: {RUSTC_TARGET}")
         return 1
 
     if STRIP_FLAGS != ["--strip-all"]:
@@ -83,6 +95,7 @@ def main() -> int:
         "--crate-type", "bin",
         "--crate-name", "family_graph_03",
         "--edition", "2024",
+        "--target", "x86_64-unknown-linux-gnu",
         "--emit=link",
         "-o", "gt_bin/family_graph_03.O3KS.gt.bin",
     ]
@@ -90,19 +103,10 @@ def main() -> int:
         print(f"FAIL expected rustc command {expected_command}, got {command}")
         return 1
 
-    info_paths = {
-        "gt_bin/family_graph_03.O3KS.gt.bin": (
-            "gt_bin/family_graph_03.O3KS.gt.build_info.txt"
-        ),
-        "bin/family_graph_03.O3KS.fixture.bin": (
-            "bin/family_graph_03.O3KS.fixture.build_info.txt"
-        ),
-    }
-    for binary_path, expected_info in info_paths.items():
-        got = build_info_path_for(binary_path)
-        if got != expected_info:
-            print(f"FAIL expected build info path {expected_info}, got {got}")
-            return 1
+    expected_manifest = str(Path("build_info") / "family_graph_03.O3KS.json")
+    if build_manifest_for("family_graph_03", "O3KS") != expected_manifest:
+        print("FAIL canonical build manifest path")
+        return 1
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -113,6 +117,8 @@ def main() -> int:
         gt_binary.write_bytes(b"symbol-bearing binary")
         gt_binary.chmod(0o755)
         fixture_binary.write_bytes(b"previous fixture")
+        manifest_path = root / "case.build.json"
+        manifest_path.write_text("previous manifest\n", encoding="utf-8")
 
         with patch("compile._run_tool", side_effect=RuntimeError("strip failed")):
             try:
@@ -153,6 +159,7 @@ def main() -> int:
             build="O3S",
             gt_binary=str(gt_binary),
             fixture_binary=str(fixture_binary),
+            manifest=str(manifest_path),
             rustc_tool=sys.executable,
             strip_tool="definitely-missing-strip-for-test",
         )
@@ -173,7 +180,149 @@ def main() -> int:
             print("FAIL tool preflight modified the fixture binary")
             return 1
 
-    print("compile profile flags, command assembly, and failure safety PASS")
+        def fake_compile_gt_binary(**kwargs):
+            Path(kwargs["output"]).write_bytes(b"new non-stripped binary")
+            return ["fake-rustc", "--target", BUILD_TARGET]
+
+        with (
+            patch("compile._require_tool"),
+            patch("compile.compile_gt_binary", side_effect=fake_compile_gt_binary),
+            patch(
+                "compile.derive_fixture_binary",
+                side_effect=RuntimeError("strip failed"),
+            ),
+        ):
+            try:
+                compile_case(args)
+            except RuntimeError as exc:
+                if "strip failed" not in str(exc):
+                    print(f"FAIL unexpected staged strip error: {exc}")
+                    return 1
+            else:
+                print("FAIL staged strip failure was not propagated")
+                return 1
+
+        if gt_binary.read_bytes() != b"symbol-bearing binary":
+            print("FAIL staged strip failure replaced the GT binary")
+            return 1
+        if fixture_binary.read_bytes() != b"previous fixture":
+            print("FAIL staged strip failure replaced the fixture binary")
+            return 1
+        if manifest_path.read_text(encoding="utf-8") != "previous manifest\n":
+            print("FAIL staged strip failure replaced the manifest")
+            return 1
+
+        with (
+            patch("compile._require_tool"),
+            patch(
+                "compile.compile_gt_binary",
+                side_effect=RuntimeError("compile failed"),
+            ),
+        ):
+            try:
+                compile_case(args)
+            except RuntimeError as exc:
+                if "compile failed" not in str(exc):
+                    print(f"FAIL unexpected staged compile error: {exc}")
+                    return 1
+            else:
+                print("FAIL staged compile failure was not propagated")
+                return 1
+
+        if gt_binary.read_bytes() != b"symbol-bearing binary":
+            print("FAIL staged compile failure replaced the GT binary")
+            return 1
+        if fixture_binary.read_bytes() != b"previous fixture":
+            print("FAIL staged compile failure replaced the fixture binary")
+            return 1
+        if manifest_path.read_text(encoding="utf-8") != "previous manifest\n":
+            print("FAIL staged compile failure replaced the manifest")
+            return 1
+
+        fixture_binary.write_bytes(b"stripped binary")
+        build_manifest = {
+            "schema_version": BUILD_MANIFEST_SCHEMA_VERSION,
+            "build_id": "test-build-id",
+            "case": "case",
+            "build": "O3S",
+            "profile": "O3",
+            "target": BUILD_TARGET,
+            "edition": "2024",
+            "crate_name": "case",
+            "source": {
+                "path": str(source),
+                "sha256": sha256_file(source),
+            },
+            "compiler": {
+                "invoked_path": "/tools/rustc",
+                "resolved_path": "/toolchains/rustc",
+                "sysroot": "/toolchains/stable",
+                "compiler_binary_path": "/toolchains/stable/bin/rustc",
+                "verbose_version": "rustc test\nhost: x86_64-unknown-linux-gnu",
+                "flags": ["-C", "opt-level=3"],
+                "command": ["rustc", str(source)],
+            },
+            "strip": {
+                "invoked_path": "/tools/strip",
+                "resolved_path": "/bin/strip",
+                "version": "GNU strip test",
+                "flags": ["--strip-all"],
+                "command": ["strip", "--strip-all", str(fixture_binary)],
+            },
+            "artifacts": {
+                "non_stripped": {
+                    "path": str(gt_binary),
+                    "sha256": sha256_file(gt_binary),
+                },
+                "stripped": {
+                    "path": str(fixture_binary),
+                    "sha256": sha256_file(fixture_binary),
+                    "stripped_from_sha256": sha256_file(gt_binary),
+                },
+            },
+        }
+        write_manifest(build_manifest, manifest_path)
+        verified = load_and_verify_manifest(
+            manifest_path,
+            expected_case="case",
+            expected_build="O3S",
+        )
+        if verified.build_id != "test-build-id":
+            print(f"FAIL unexpected verified build id: {verified.build_id}")
+            return 1
+
+        fixture_binary.write_bytes(b"tampered binary")
+        try:
+            load_and_verify_manifest(
+                manifest_path,
+                expected_case="case",
+                expected_build="O3S",
+            )
+        except ValueError as exc:
+            if "stripped binary hash mismatch" not in str(exc):
+                print(f"FAIL unexpected tamper error: {exc}")
+                return 1
+        else:
+            print("FAIL tampered fixture binary passed manifest verification")
+            return 1
+
+        fixture_binary.write_bytes(b"stripped binary")
+        source.write_text("fn main() { println!(\"changed\"); }\n", encoding="utf-8")
+        try:
+            load_and_verify_manifest(
+                manifest_path,
+                expected_case="case",
+                expected_build="O3S",
+            )
+        except ValueError as exc:
+            if "source hash mismatch" not in str(exc):
+                print(f"FAIL unexpected source tamper error: {exc}")
+                return 1
+        else:
+            print("FAIL modified source passed manifest verification")
+            return 1
+
+    print("compile target, staging, manifest, and tamper verification PASS")
     return 0
 
 
