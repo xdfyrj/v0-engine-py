@@ -74,6 +74,7 @@ gt_extractor.py       non-stripped symbol table -> ground truth JSON
 engine.py             Call-Graph Weisfeiler-Lehman color refinement engine
 scores.py             ground truth loader + pairwise scorer + CLI
 run_case.py           stem-based end-to-end pipeline runner
+run_baseline.py       rebuild and verify all four canonical V0 builds
 src/                  Rust example sources (corpus 원본)
 bin/                  stripped evaluation binaries
 gt_bin/               non-stripped ground-truth binaries
@@ -85,6 +86,7 @@ test/test_engine.py   neighbor color multiset aggregation regression
 test/test_binary_extractor.py startup, tail-call, user address regression
 test/test_gt_extractor.py compiler symbol GT and user address regression
 test/test_scores.py   fg01/fg02/fg03K/fg03 metric regression
+test/run_all.py       syntax check + complete regression runner
 ```
 
 ## Binary Provenance
@@ -597,7 +599,7 @@ gt_extractor.py     -> ground_truth/family_graph_03.O3S.gt.json
 gt_extractor.py     -> users/family_graph_03.O3S.users.json
 binary_extractor.py -> fixtures/family_graph_03.O3S.fixture.json
 engine.py CG-WL     -> predicted clusters
-scores.py           -> predicted clusters + symbols + TP/FP/FN + PR/RE/F1/ARI report
+scores.py           -> clusters/origins + TP/FP/FN/TN + PR/RE/F1/ARI
 ```
 
 Regenerate the current family_graph stems source-to-end:
@@ -608,6 +610,18 @@ python3 compile.py family_graph_02 && python3 run_case.py family_graph_02
 python3 compile.py family_graph_03 && python3 run_case.py family_graph_03
 python3 compile.py family_graph_03 --build O3KS && python3 run_case.py family_graph_03 --build O3KS
 ```
+
+Regenerate and verify all four canonical V0 builds with one command:
+
+```bash
+python3 run_baseline.py
+```
+
+This command compiles each source, verifies its manifest while regenerating
+GT/users/fixture JSON, writes `results/v0_baseline.json`, and runs the exact V0
+score regression. It intentionally targets the canonical V0 paths and hashes.
+Use the individual `compile.py`, `run_case.py`, and `scores.py` commands with
+separate output paths for compiler-version experiments.
 
 Score one case:
 
@@ -622,42 +636,30 @@ python3 scores.py family_graph_03
 python3 scores.py family_graph_03 --build O3KS
 python3 scores.py family_graph_03 --mode out
 python3 scores.py family_graph_03 --all-modes
+python3 scores.py family_graph_03 --json-output results/fg03.O3S.json
 ```
 
-Generate family-level measurement source reports:
+Generate the canonical V0 score result set:
 
 ```bash
-python3 family_report.py
-python3 family_report.py family_graph_01
-python3 family_report.py family_graph_03 --mode out
-python3 family_report.py family_graph_03 --all-modes
-python3 family_report.py family_graph_03.O3KS --out-dir reports/fg03_o3ks
+python3 scores.py --baseline --json-output results/v0_baseline.json
 ```
 
-This writes:
+The JSON contains one result per case/build/mode. Each result records:
 
 ```text
-reports/measurement_evidence.md
-reports/origins.csv
-reports/anchors.csv
-reports/instance_relations.csv
-reports/round_partitions.csv
-reports/round_signatures.csv
-reports/family_rows.csv
-reports/predicted_clusters.csv
-reports/collision_candidates.csv
-reports/scores.csv
+case, build, mode
+candidate_count, pair_count, rounds
+TP, FP, FN, TN, precision, recall, F1, ARI
+predicted clusters with member IDs, symbols, and origins
+per-origin k_obs, cluster count, recovered/total pairs, and colliding origins
 ```
 
-`family_report.py` is score-side measurement code. It annotates predicted
-clusters with origin/family labels after CG-WL has run; the engine still never
-reads ground truth. It is intended as a minimal evidence pack for writing
-measurement notes, not as an automatic diagnosis generator. It reports observed
-origin membership, anchor context, per-instance Axis-1 relations, round
-partitions/signatures, family rows, predicted clusters, collision candidates,
-and pairwise scores. It intentionally omits diagnosis, conclusions,
-source-level census, and coverage. The default mode is `full`; use
-`--all-modes` to report `full`, `out`, `in`, and `out-in`.
+This is score-side output: CG-WL still runs without ground truth, and only
+`scores.py` joins the predicted partition with origin labels. Detailed call
+relations and round traces are not duplicated in score artifacts; inspect the
+fixture or run the engine directly when debugging them. Use `--all-modes` to
+store `full`, `out`, `in`, and `out-in` results together.
 
 Extract compiler-derived ground truth:
 
@@ -668,7 +670,7 @@ python3 gt_extractor.py family_graph_03
 Equivalent explicit input/output form:
 
 ```bash
-python3 gt_extractor.py gt_bin/family_graph_03.gt.bin ground_truth/family_graph_03.O3S.gt.json \
+python3 gt_extractor.py gt_bin/family_graph_03.O3S.gt.bin ground_truth/family_graph_03.O3S.gt.json \
   --build O3S \
   --users users/family_graph_03.O3S.users.json
 ```
@@ -682,21 +684,27 @@ python3 binary_extractor.py family_graph_03
 Run regression tests:
 
 ```bash
+python3 test/run_all.py
+```
+
+Equivalent individual commands:
+
+```bash
 python3 test/test_compile.py
 python3 test/test_engine.py
 python3 test/test_binary_extractor.py
 python3 test/test_gt_extractor.py
 python3 test/test_scores.py
-python3 -m py_compile compile.py binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py family_report.py test/test_compile.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py
+python3 -m py_compile compile.py binary_extractor.py gt_extractor.py model.py loader.py engine.py scores.py run_case.py run_baseline.py test/test_compile.py test/test_engine.py test/test_binary_extractor.py test/test_gt_extractor.py test/test_scores.py test/run_all.py
 ```
 
 Current score regression targets:
 
 ```text
-family_graph_01 O3S   P=1.00 R=1.00 F1=1.00 ARI=1.00
-family_graph_02 O3S   P=0.29 R=1.00 F1=0.44 ARI=0.39
-family_graph_03 O3KS  P=0.94 R=1.00 F1=0.97 ARI=0.96
-family_graph_03 O3S   P=0.80 R=0.40 F1=0.53 ARI=0.49
+family_graph_01 O3S   PR=1.00 RE=1.00 F1=1.00 ARI=1.00
+family_graph_02 O3S   PR=0.29 RE=1.00 F1=0.44 ARI=0.39
+family_graph_03 O3KS  PR=0.94 RE=1.00 F1=0.97 ARI=0.96
+family_graph_03 O3S   PR=0.80 RE=0.40 F1=0.53 ARI=0.49
 ```
 
 ## Current Data

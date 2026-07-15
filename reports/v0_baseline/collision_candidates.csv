@@ -1,5 +1,0 @@
-case,build,mode,cluster,members,symbols,origins,relation_patterns
-family_graph_02,O3S,full,C3,FUN_00114590;FUN_001147f0;FUN_00114ac0;FUN_00114c70,process_alpha;process_alpha;c_process_alpha_i32;c_process_alpha_wide,c_process_alpha_i32;c_process_alpha_wide;process_alpha,2*[self=0; dout=1; din=1; out=recurse_alpha*5; in=anchor:root*2] | 1*[self=0; dout=1; din=1; out=c_recurse_alpha_i32*5; in=anchor:root*2] | 1*[self=0; dout=1; din=1; out=c_recurse_alpha_wide*5; in=anchor:root*2]
-family_graph_02,O3S,full,C4,FUN_00114910;FUN_001149a0;FUN_00114be0;FUN_00114ee0,recurse_alpha;recurse_alpha;c_recurse_alpha_i32;c_recurse_alpha_wide,c_recurse_alpha_i32;c_recurse_alpha_wide;recurse_alpha,2*[self=1; dout=0; din=1; out=-; in=process_alpha*5] | 1*[self=1; dout=0; din=1; out=-; in=c_process_alpha_i32*5] | 1*[self=1; dout=0; din=1; out=-; in=c_process_alpha_wide*5]
-family_graph_03,O3S,full,C4,FUN_001156e0;FUN_001157e0,decoy_a;decoy_b,decoy_a;decoy_b,2*[self=0; dout=0; din=1; out=-; in=anchor:root*2]
-family_graph_03,O3KS,full,C4,FUN_00115680;FUN_00115780,decoy_a;decoy_b,decoy_a;decoy_b,2*[self=0; dout=0; din=1; out=-; in=anchor:root*2]

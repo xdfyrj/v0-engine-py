@@ -1,5 +1,0 @@
-case,build,mode,engine_rounds,effective_rounds,TP,FP,FN,TN,precision,recall,F1,ARI
-family_graph_01,O3S,full,1,0,6,0,0,9,1.00,1.00,1.00,1.00
-family_graph_02,O3S,full,2,1,4,10,0,52,0.29,1.00,0.44,0.39
-family_graph_03,O3S,full,2,1,4,1,6,67,0.80,0.40,0.53,0.49
-family_graph_03,O3KS,full,2,1,15,1,0,120,0.94,1.00,0.97,0.96

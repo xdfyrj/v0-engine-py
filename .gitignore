@@ -2,8 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 v0-engine-py.zip
-reports/
-!reports/
-reports/*
-!reports/v0_baseline/
-!reports/v0_baseline/**
+results/
+!results/
+results/*
+!results/v0_baseline.json

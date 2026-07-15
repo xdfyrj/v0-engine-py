@@ -103,8 +103,9 @@ def main() -> int:
         print(f"FAIL expected rustc command {expected_command}, got {command}")
         return 1
 
-    expected_manifest = str(Path("build_info") / "family_graph_03.O3KS.json")
-    if build_manifest_for("family_graph_03", "O3KS") != expected_manifest:
+    expected_manifest = Path("build_info") / "family_graph_03.O3KS.json"
+    actual_manifest = Path(build_manifest_for("family_graph_03", "O3KS"))
+    if actual_manifest != expected_manifest:
         print("FAIL canonical build manifest path")
         return 1
 

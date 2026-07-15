@@ -1,14 +1,20 @@
 # Exact V0 baseline regression for the four canonical builds.
 
+import json
 import os
 import sys
-from itertools import combinations
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from build_manifest import load_and_verify_manifest, sha256_file
 from paths import build_manifest_for, fixture_json_for, gt_json_for
-from scores import load_ground_truth, score_case
+from scores import (
+    load_ground_truth,
+    reports_to_dict,
+    score_case,
+    score_v0_baseline,
+)
 
 
 CASES = [
@@ -26,6 +32,10 @@ CASES = [
             ("FUN_00113e20", "FUN_00113f00", "FUN_00113f80"),
             ("FUN_00114460", "FUN_00114640", "FUN_00114880"),
         ),
+        "origin_scores": {
+            "shared_recursive": (3, 1, 3, 3, ()),
+            "process": (3, 1, 3, 3, ()),
+        },
     },
     {
         "case": "family_graph_02",
@@ -52,6 +62,34 @@ CASES = [
             ("FUN_00114590", "FUN_001147f0", "FUN_00114ac0", "FUN_00114c70"),
             ("FUN_00114910", "FUN_001149a0", "FUN_00114be0", "FUN_00114ee0"),
         ),
+        "origin_scores": {
+            "process_beta": (2, 1, 1, 1, ()),
+            "recurse_beta": (2, 1, 1, 1, ()),
+            "process_alpha": (
+                2, 1, 1, 1,
+                ("c_process_alpha_i32", "c_process_alpha_wide"),
+            ),
+            "recurse_alpha": (
+                2, 1, 1, 1,
+                ("c_recurse_alpha_i32", "c_recurse_alpha_wide"),
+            ),
+            "c_process_alpha_i32": (
+                1, 1, 0, 0,
+                ("c_process_alpha_wide", "process_alpha"),
+            ),
+            "c_recurse_alpha_i32": (
+                1, 1, 0, 0,
+                ("c_recurse_alpha_wide", "recurse_alpha"),
+            ),
+            "c_process_alpha_wide": (
+                1, 1, 0, 0,
+                ("c_process_alpha_i32", "process_alpha"),
+            ),
+            "c_recurse_alpha_wide": (
+                1, 1, 0, 0,
+                ("c_recurse_alpha_i32", "recurse_alpha"),
+            ),
+        },
     },
     {
         "case": "family_graph_03",
@@ -80,6 +118,14 @@ CASES = [
             ("FUN_00116000", "FUN_00116330"),
             ("FUN_00116590",),
         ),
+        "origin_scores": {
+            "share": (3, 2, 1, 3, ()),
+            "leaf_p": (2, 1, 1, 1, ()),
+            "decoy_a": (1, 1, 0, 0, ("decoy_b",)),
+            "decoy_b": (1, 1, 0, 0, ("decoy_a",)),
+            "drive_x": (3, 2, 1, 3, ()),
+            "drive_y": (3, 2, 1, 3, ()),
+        },
     },
     {
         "case": "family_graph_03",
@@ -107,6 +153,15 @@ CASES = [
             ("FUN_00115900", "FUN_00115b50", "FUN_00115e10"),
             ("FUN_00115fa0", "FUN_001162d0", "FUN_00116530"),
         ),
+        "origin_scores": {
+            "share": (3, 1, 3, 3, ()),
+            "leaf_p": (3, 1, 3, 3, ()),
+            "leaf_q": (3, 1, 3, 3, ()),
+            "decoy_a": (1, 1, 0, 0, ("decoy_b",)),
+            "decoy_b": (1, 1, 0, 0, ("decoy_a",)),
+            "drive_x": (3, 1, 3, 3, ()),
+            "drive_y": (3, 1, 3, 3, ()),
+        },
     },
 ]
 
@@ -138,30 +193,47 @@ def main() -> int:
             report.pairwise.f1,
             report.pairwise.ari,
         ))
-        candidate_count = sum(len(cluster) for cluster in report.clusters)
-        pair_count = sum(1 for _ in combinations(range(candidate_count), 2))
+        clusters = tuple(cluster.member_ids for cluster in report.clusters)
+        origin_scores = {
+            row.origin: (
+                row.k_obs,
+                row.predicted_cluster_count,
+                row.recovered_pairs,
+                row.total_pairs,
+                row.colliding_origins,
+            )
+            for row in report.origins
+        }
 
         checks = {
             "source hash": sha256_file(verified.source) == expected["source_sha256"],
             "GT binary hash": sha256_file(verified.non_stripped_binary) == expected["gt_sha256"],
             "fixture binary hash": sha256_file(verified.stripped_binary) == expected["fixture_sha256"],
             "origin census": origin_sizes == expected["origin_sizes"],
+            "candidate count": report.candidate_count == sum(expected["origin_sizes"].values()),
             "rounds": report.rounds == expected["rounds"],
             "pair counts": counts == expected["counts"],
-            "pair total": pair_count == sum(counts),
+            "pair total": report.pair_count == sum(counts),
             "metrics": metrics == expected["metrics"],
-            "clusters": report.clusters == expected["clusters"],
+            "clusters": clusters == expected["clusters"],
+            "origin scores": origin_scores == expected["origin_scores"],
         }
         failed = [name for name, ok in checks.items() if not ok]
         ok = not failed
         all_ok = all_ok and ok
         tag = "PASS" if ok else f"FAIL ({', '.join(failed)})"
         print(
-            f"{case}/{build}: n={candidate_count} TP={counts[0]} FP={counts[1]} "
+            f"{case}/{build}: n={report.candidate_count} TP={counts[0]} FP={counts[1]} "
             f"FN={counts[2]} TN={counts[3]} PR={metrics[0]:.2f} "
             f"RE={metrics[1]:.2f} F1={metrics[2]:.2f} ARI={metrics[3]:.2f} {tag}"
         )
 
+    baseline_path = Path(__file__).resolve().parents[1] / "results" / "v0_baseline.json"
+    stored_baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    generated_baseline = reports_to_dict(score_v0_baseline())
+    baseline_ok = stored_baseline == generated_baseline
+    all_ok = all_ok and baseline_ok
+    print(f"baseline score JSON: {'PASS' if baseline_ok else 'FAIL'}")
     print("ALL PASS" if all_ok else "SOME FAILED")
     return 0 if all_ok else 1
 

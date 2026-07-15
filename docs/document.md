@@ -10,7 +10,7 @@
 
 `engine.py`는 fixture JSON만 보고 Call-Graph Weisfeiler-Lehman(CG-WL)을 실행한다. CG-WL은 함수의 self-call count, non-self out-degree, caller/callee relation, call count를 반복적으로 반영하여 predicted cluster를 만든다. 즉 함수 body similarity가 아니라 call graph 안에서의 역할을 기준으로 grouping한다.
 
-`scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 predicted clusters, symbols, TP/FP/FN, Precision, Recall, F1, ARI를 출력한다.
+`scores.py`는 engine이 만든 predicted clusters와 ground truth를 비교한다. 평가는 함수 하나하나가 아니라 함수 쌍(pair) 기준으로 수행한다. 같은 origin이어야 하는 함수 쌍을 같은 cluster로 묶으면 TP, 다른 origin인데 같은 cluster로 묶으면 FP, 같은 origin인데 서로 다른 cluster로 갈라지면 FN으로 계산한다. 최종적으로 candidate/pair 수, origin이 붙은 predicted clusters, origin별 복원 결과, TP/FP/FN/TN, Precision, Recall, F1, ARI를 출력한다. 같은 결과는 선택적으로 단일 JSON에 저장할 수 있다.
 
 따라서 `v0-engine-py`는 다음을 자동화한다.
 
@@ -31,7 +31,7 @@ fixture JSON             ground truth JSON
       |                         |
       +------> scores.py <------+
                    |
-        P/R/F1/ARI + floor diagnosis
+        clusters/origins + PR/RE/F1/ARI
 ```
 
 파이프 라인을 3가지 경로로 크게 구분 할 수 있다.
@@ -744,7 +744,7 @@ ground truth origin partition
 ```
 
 ## 6. Scoring Path
-predicted cluster + ground truth -> predicted clusters / TP/FP/FN / Precision/Recall/F1-score/ARI
+predicted cluster + ground truth -> clusters/origins / TP/FP/FN/TN / Precision/Recall/F1-score/ARI
 
 ### 6.1 scores.py
 `scores.py`는 engine이 만든 predicted cluster와 ground truth origin partition을 비교해서 점수를 계산한다.
@@ -754,10 +754,13 @@ predicted cluster + ground truth -> predicted clusters / TP/FP/FN / Precision/Re
 - ground truth JSON
 
 출력:
-- predicted clusters
-- TP / FP / FN
+- candidate 수와 전체 pair 수
+- member ID, symbol, origin이 붙은 predicted clusters
+- origin별 cluster 수, 복원 pair 수, 충돌 origin
+- TP / FP / FN / TN
 - Precision / Recall / F1
 - ARI
+- 선택적 단일 JSON
 
 큰 흐름은 7단계이다.
 
@@ -768,7 +771,7 @@ predicted cluster + ground truth -> predicted clusters / TP/FP/FN / Precision/Re
 4. CG-WL engine 실행
 5. 모든 scored 함수 쌍을 비교
 6. P/R/F1/ARI 계산
-7. predicted clusters와 score 출력
+7. cluster/origin 결과 구성 및 CLI/JSON 출력
 ```
 
 #### 1단계: ground truth model
@@ -1060,20 +1063,34 @@ main(argv)
 CLI 사용은 아래와 같다.
 
 ```bash
-python3 scores.py fixtures/fg03_auto.fixture.json ground_truth/fg03_auto.gt.json
+python3 scores.py family_graph_03
+python3 scores.py family_graph_03 --json-output results/fg03.O3S.json
+python3 scores.py --baseline --json-output results/v0_baseline.json
 ```
+
+현재 canonical V0 네 build를 source부터 다시 만들고 검증하려면 다음 상위 runner를 사용한다.
+
+```bash
+python3 run_baseline.py
+```
+
+이 runner는 네 build의 compile, manifest 검증, GT/users/fixture 재생성, baseline JSON 생성, exact score 회귀 검사를 순서대로 실행한다. 전체 구문 및 회귀 검사는 `python3 test/run_all.py` 하나로 실행한다.
 
 출력은 대략 아래 형태다.
 
 ```text
-case : fg03 / O3S
+case : family_graph_03 / O3S
+mode: full
+candidates: 13
+candidate pairs: 78
+rounds: 2
 predicted clusters:
-  C1 = ['FUN_00145a83', 'FUN_00145ae1']
-  C2 = ['FUN_0014e803']
-symbols:
-  C1 = ['share::<i32>', 'share::<u64>']
-  C2 = ['decoy_a']
-TP=4 FP=1 FN=6
+  C1:
+    FUN_00114690 | share | origin=share
+    FUN_00114a10 | share | origin=share
+origins:
+  share: k_obs=3 clusters=2 pairs=1/3 collisions=-
+TP=4 FP=1 FN=6 TN=67
 PR=0.80 RE=0.40 F1=0.53 ARI=0.49
 ```
 
@@ -1083,7 +1100,7 @@ PR=0.80 RE=0.40 F1=0.53 ARI=0.49
 engine.py predicted cluster
 ground_truth/*.gt.json true origin partition
 ->
-pairwise P/R/F1/ARI
+pairwise PR/RE/F1/ARI + cluster/origin result JSON
 ```
 
 그리고 이 파일의 핵심 원칙은 하나다.

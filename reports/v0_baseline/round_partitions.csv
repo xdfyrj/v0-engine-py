@@ -1,8 +1,0 @@
-case,build,mode,round,num_classes,classes,split_this_round
-family_graph_01,O3S,full,0,2,{shared_recursive*3} {process*3},-
-family_graph_02,O3S,full,0,3,"{c_process_alpha_i32, c_process_alpha_wide, process_alpha*2, process_beta*2} {recurse_beta*2} {c_recurse_alpha_i32, c_recurse_alpha_wide, recurse_alpha*2}",-
-family_graph_02,O3S,full,1,4,"{process_beta*2} {recurse_beta*2} {c_process_alpha_i32, c_process_alpha_wide, process_alpha*2} {c_recurse_alpha_i32, c_recurse_alpha_wide, recurse_alpha*2}",-
-family_graph_03,O3S,full,0,2,"{drive_x*3, drive_y*3, share*2} {decoy_a, decoy_b, leaf_p*2, share}",-
-family_graph_03,O3S,full,1,8,"{share*2} {share} {leaf_p*2} {decoy_a, decoy_b} {drive_x*2} {drive_x} {drive_y*2} {drive_y}",drive_x;drive_y
-family_graph_03,O3KS,full,0,3,"{share*3} {decoy_a, decoy_b, leaf_p*3, leaf_q*3} {drive_x*3, drive_y*3}",-
-family_graph_03,O3KS,full,1,6,"{share*3} {leaf_p*3} {leaf_q*3} {decoy_a, decoy_b} {drive_x*3} {drive_y*3}",-

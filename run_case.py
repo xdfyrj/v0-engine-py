@@ -17,7 +17,7 @@ from paths import (
     split_case_build,
     users_json_for,
 )
-from scores import format_report, score_all_modes, score_case
+from scores import format_report, score_all_modes, score_case, write_reports_json
 
 
 def run_fixture_only(fixture_path: str, mode: str) -> None:
@@ -83,16 +83,18 @@ def run_pipeline(args: argparse.Namespace) -> None:
     validate_against_fixture(gt, fixture_json)
 
     if args.all_modes:
-        print("\n\n".join(
-            format_report(report)
-            for report in score_all_modes(fixture_json, gt_json)
-        ))
+        reports = score_all_modes(fixture_json, gt_json)
     else:
-        print(format_report(score_case(
+        reports = (score_case(
             fixture_json,
             gt_json,
             mode=args.mode,
-        )))
+        ),)
+
+    print("\n\n".join(format_report(report) for report in reports))
+    if args.json_output:
+        write_reports_json(reports, args.json_output)
+        print(f"\nJSON: {args.json_output}")
 
 
 def extract_fixture(
@@ -195,6 +197,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--all-modes",
         action="store_true",
         help="score full, out, in, and out-in modes",
+    )
+    parser.add_argument(
+        "--json-output",
+        help="write the score result set to one JSON file",
     )
     return parser
 

@@ -2,7 +2,9 @@
 # scores.py
 #
 # 자동 채점기 (auto scorer)
-#   - 쌍별 precision / recall / F1 / ARI
+#   - 전체 pairwise score
+#   - predicted cluster와 origin별 복원 결과
+#   - CLI 및 단일 JSON 출력
 #
 # 규칙
 #   엔진은 origin 을 모른다. scorer 만 ground truth 를 본다.
@@ -17,6 +19,7 @@ import re
 import sys
 from dataclasses import dataclass
 from itertools import combinations
+from pathlib import Path
 
 from engine import (
     CG_WL_MODES,
@@ -32,6 +35,13 @@ from paths import DEFAULT_BUILD, resolve_fixture_json, resolve_gt_json, split_ca
 # ---------------------------------------------------------- ground truth model
 
 GROUND_TRUTH_SCHEMA_VERSION = 3
+
+V0_BASELINE_JOBS: tuple[tuple[str, str], ...] = (
+    ("family_graph_01", "O3S"),
+    ("family_graph_02", "O3S"),
+    ("family_graph_03", "O3S"),
+    ("family_graph_03", "O3KS"),
+)
 
 
 @dataclass(frozen=True)
@@ -148,13 +158,43 @@ class PairwiseScore:
 
 
 @dataclass(frozen=True)
+class ScoredMember:
+    id: str
+    symbols: tuple[str, ...]
+    origin: str
+
+
+@dataclass(frozen=True)
+class PredictedCluster:
+    name: str
+    members: tuple[ScoredMember, ...]
+    origins: tuple[str, ...]
+
+    @property
+    def member_ids(self) -> tuple[str, ...]:
+        return tuple(member.id for member in self.members)
+
+
+@dataclass(frozen=True)
+class OriginScore:
+    origin: str
+    k_obs: int
+    predicted_cluster_count: int
+    recovered_pairs: int
+    total_pairs: int
+    colliding_origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ScoreReport:
     case: str
     build: str
     mode: CGWLMode
+    candidate_count: int
+    pair_count: int
     rounds: int
-    clusters: tuple[tuple[str, ...], ...]
-    cluster_symbols: tuple[tuple[str, ...], ...]
+    clusters: tuple[PredictedCluster, ...]
+    origins: tuple[OriginScore, ...]
     pairwise: PairwiseScore
 
 
@@ -192,17 +232,18 @@ def score_case(
             tn += 1
 
     pairwise = _pairwise_score(tp, fp, fn, tn)
+    clusters = _make_predicted_clusters(result.clusters, gt, origin_of)
+    origins = _make_origin_scores(gt, cluster_of, clusters)
 
     return ScoreReport(
         case=case.case,
         build=case.build,
         mode=result.mode,
+        candidate_count=len(scored_ids),
+        pair_count=len(scored_ids) * (len(scored_ids) - 1) // 2,
         rounds=result.rounds,
-        clusters=tuple(tuple(cluster) for cluster in result.clusters),
-        cluster_symbols=tuple(
-            tuple(_format_member_symbols(gt, node_id) for node_id in cluster)
-            for cluster in result.clusters
-        ),
+        clusters=clusters,
+        origins=origins,
         pairwise=pairwise,
     )
 
@@ -215,6 +256,23 @@ def score_all_modes(
         score_case(fixture_path, ground_truth_path, mode=mode)
         for mode in CG_WL_MODES
     )
+
+
+def score_v0_baseline(
+    *,
+    mode: CGWLMode = DEFAULT_CG_WL_MODE,
+    all_modes: bool = False,
+) -> tuple[ScoreReport, ...]:
+    reports = []
+    modes = CG_WL_MODES if all_modes else (mode,)
+    for case, build in V0_BASELINE_JOBS:
+        fixture_path = resolve_fixture_json(case, build)
+        gt_path = resolve_gt_json(case, build)
+        reports.extend(
+            score_case(fixture_path, gt_path, mode=mode)
+            for mode in modes
+        )
+    return tuple(reports)
 
 
 def _pairwise_score(tp: int, fp: int, fn: int, tn: int) -> PairwiseScore:
@@ -261,11 +319,67 @@ def _check_join(case: Case, gt: GroundTruth) -> None:
         )
 
 
-def _format_member_symbols(gt: GroundTruth, member_id: str) -> str:
-    names = tuple(_display_symbol(name, gt.case) for name in gt.symbols[member_id])
-    if len(names) == 1:
-        return names[0]
-    return " | ".join(names)
+def _make_predicted_clusters(
+    raw_clusters: list[list[str]],
+    gt: GroundTruth,
+    origin_of: dict[str, str],
+) -> tuple[PredictedCluster, ...]:
+    clusters = []
+    for index, member_ids in enumerate(raw_clusters, start=1):
+        members = tuple(
+            ScoredMember(
+                id=member_id,
+                symbols=tuple(
+                    _display_symbol(symbol, gt.case)
+                    for symbol in gt.symbols[member_id]
+                ),
+                origin=origin_of[member_id],
+            )
+            for member_id in member_ids
+        )
+        clusters.append(PredictedCluster(
+            name=f"C{index}",
+            members=members,
+            origins=tuple(sorted({member.origin for member in members})),
+        ))
+    return tuple(clusters)
+
+
+def _make_origin_scores(
+    gt: GroundTruth,
+    cluster_of: dict[str, int],
+    clusters: tuple[PredictedCluster, ...],
+) -> tuple[OriginScore, ...]:
+    origins_by_cluster = {
+        index: set(cluster.origins)
+        for index, cluster in enumerate(clusters)
+    }
+    rows = []
+
+    for group in gt.origins:
+        cluster_ids = {cluster_of[member] for member in group.members}
+        recovered_pairs = sum(
+            1
+            for a, b in combinations(group.members, 2)
+            if cluster_of[a] == cluster_of[b]
+        )
+        colliding_origins = sorted({
+            other
+            for cluster_id in cluster_ids
+            for other in origins_by_cluster[cluster_id]
+            if other != group.origin
+        })
+        k_obs = len(group.members)
+        rows.append(OriginScore(
+            origin=group.origin,
+            k_obs=k_obs,
+            predicted_cluster_count=len(cluster_ids),
+            recovered_pairs=recovered_pairs,
+            total_pairs=k_obs * (k_obs - 1) // 2,
+            colliding_origins=tuple(colliding_origins),
+        ))
+
+    return tuple(rows)
 
 
 def _display_symbol(symbol: str, case: str) -> str:
@@ -282,23 +396,95 @@ def format_report(r: ScoreReport) -> str:
     lines = [
         f"case : {r.case} / {r.build}",
         f"mode: {r.mode}",
+        f"candidates: {r.candidate_count}",
+        f"candidate pairs: {r.pair_count}",
         f"rounds: {r.rounds}",
         "predicted clusters:",
     ]
-    lines.extend(
-        f"  C{index} = {list(cluster)}"
-        for index, cluster in enumerate(r.clusters, start=1)
-    )
-    lines.append("symbols:")
-    lines.extend(
-        f"  C{index} = {list(symbols)}"
-        for index, symbols in enumerate(r.cluster_symbols, start=1)
-    )
+    for cluster in r.clusters:
+        lines.append(f"  {cluster.name}:")
+        lines.extend(
+            f"    {member.id} | {' | '.join(member.symbols)} | origin={member.origin}"
+            for member in cluster.members
+        )
+    lines.append("origins:")
+    for origin in r.origins:
+        collisions = ", ".join(origin.colliding_origins) or "-"
+        lines.append(
+            f"  {origin.origin}: k_obs={origin.k_obs} "
+            f"clusters={origin.predicted_cluster_count} "
+            f"pairs={origin.recovered_pairs}/{origin.total_pairs} "
+            f"collisions={collisions}"
+        )
     lines.extend([
-        f"TP={p.tp} FP={p.fp} FN={p.fn}",
+        f"TP={p.tp} FP={p.fp} FN={p.fn} TN={p.tn}",
         f"PR={p.precision:.2f} RE={p.recall:.2f} F1={p.f1:.2f} ARI={p.ari:.2f}",
     ])
     return "\n".join(lines)
+
+
+def score_report_to_dict(report: ScoreReport) -> dict:
+    p = report.pairwise
+    return {
+        "case": report.case,
+        "build": report.build,
+        "mode": report.mode,
+        "candidate_count": report.candidate_count,
+        "pair_count": report.pair_count,
+        "rounds": report.rounds,
+        "pairwise": {
+            "TP": p.tp,
+            "FP": p.fp,
+            "FN": p.fn,
+            "TN": p.tn,
+            "precision": p.precision,
+            "recall": p.recall,
+            "F1": p.f1,
+            "ARI": p.ari,
+        },
+        "clusters": [
+            {
+                "cluster": cluster.name,
+                "origins": list(cluster.origins),
+                "members": [
+                    {
+                        "id": member.id,
+                        "symbols": list(member.symbols),
+                        "origin": member.origin,
+                    }
+                    for member in cluster.members
+                ],
+            }
+            for cluster in report.clusters
+        ],
+        "origins": [
+            {
+                "origin": origin.origin,
+                "k_obs": origin.k_obs,
+                "predicted_cluster_count": origin.predicted_cluster_count,
+                "recovered_pairs": origin.recovered_pairs,
+                "total_pairs": origin.total_pairs,
+                "colliding_origins": list(origin.colliding_origins),
+            }
+            for origin in report.origins
+        ],
+    }
+
+
+def reports_to_dict(reports: tuple[ScoreReport, ...]) -> dict:
+    return {
+        "schema_version": 1,
+        "results": [score_report_to_dict(report) for report in reports],
+    }
+
+
+def write_reports_json(reports: tuple[ScoreReport, ...], output_path: str) -> None:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(reports_to_dict(reports), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -307,6 +493,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "fixture",
+        nargs="?",
         help="fixture JSON path, or an example stem",
     )
     parser.add_argument(
@@ -326,6 +513,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="score full, out, in, and out-in modes",
     )
+    parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="score the four canonical V0 builds",
+    )
+    parser.add_argument(
+        "--json-output",
+        help="write the score result set to one JSON file",
+    )
     return parser
 
 
@@ -333,24 +529,37 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    if args.ground_truth is None:
-        case, build = split_case_build(args.fixture, args.build)
-        fixture_path = resolve_fixture_json(case, build)
-        gt_path = resolve_gt_json(case, build)
-    else:
-        fixture_path = args.fixture
-        gt_path = args.ground_truth
-
     try:
-        if args.all_modes:
-            reports = score_all_modes(fixture_path, gt_path)
-            print("\n\n".join(format_report(report) for report in reports))
+        if args.baseline:
+            if args.fixture is not None or args.ground_truth is not None or args.build:
+                parser.error(
+                    "--baseline cannot be combined with fixture, ground_truth, or --build"
+                )
+            reports = score_v0_baseline(mode=args.mode, all_modes=args.all_modes)
         else:
-            print(format_report(score_case(
-                fixture_path,
-                gt_path,
-                mode=args.mode,
-            )))
+            if args.fixture is None:
+                parser.error("fixture or --baseline is required")
+            if args.ground_truth is None:
+                case, build = split_case_build(args.fixture, args.build)
+                fixture_path = resolve_fixture_json(case, build)
+                gt_path = resolve_gt_json(case, build)
+            else:
+                fixture_path = args.fixture
+                gt_path = args.ground_truth
+
+            if args.all_modes:
+                reports = score_all_modes(fixture_path, gt_path)
+            else:
+                reports = (score_case(
+                    fixture_path,
+                    gt_path,
+                    mode=args.mode,
+                ),)
+
+        print("\n\n".join(format_report(report) for report in reports))
+        if args.json_output:
+            write_reports_json(reports, args.json_output)
+            print(f"\nJSON: {args.json_output}")
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
