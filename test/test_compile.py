@@ -148,7 +148,10 @@ def main() -> int:
         if fixture_binary.read_bytes() != b"symbol-bearing binary":
             print("FAIL successful fixture derivation produced wrong contents")
             return 1
-        if fixture_binary.stat().st_mode & 0o777 != 0o755:
+        if (
+            sys.platform.startswith("linux")
+            and fixture_binary.stat().st_mode & 0o777 != 0o755
+        ):
             print("FAIL fixture derivation did not preserve executable mode")
             return 1
 
