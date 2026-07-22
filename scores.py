@@ -25,6 +25,8 @@ from engine import (
     CG_WL_MODES,
     DEFAULT_CG_WL_MODE,
     CGWLMode,
+    CGWLRoundTrace,
+    format_cg_wl_trace,
     run_cg_wl,
 )
 from loader import load_case
@@ -196,6 +198,7 @@ class ScoreReport:
     clusters: tuple[PredictedCluster, ...]
     origins: tuple[OriginScore, ...]
     pairwise: PairwiseScore
+    trace: tuple[CGWLRoundTrace, ...] = ()
 
 
 # ---------------------------------------------------------- scoring
@@ -205,12 +208,13 @@ def score_case(
     ground_truth_path: str,
     *,
     mode: CGWLMode = DEFAULT_CG_WL_MODE,
+    trace: bool = False,
 ) -> ScoreReport:
     case = load_case(fixture_path)
     gt = load_ground_truth(ground_truth_path)
     _check_join(case, gt)
 
-    result = run_cg_wl(case, mode=mode)
+    result = run_cg_wl(case, mode=mode, trace=trace)
     cluster_of = result.cluster_id_by_node      # scored nodes only
     origin_of = gt.origin_of()
 
@@ -245,15 +249,18 @@ def score_case(
         clusters=clusters,
         origins=origins,
         pairwise=pairwise,
+        trace=result.trace,
     )
 
 
 def score_all_modes(
     fixture_path: str,
     ground_truth_path: str,
+    *,
+    trace: bool = False,
 ) -> tuple[ScoreReport, ...]:
     return tuple(
-        score_case(fixture_path, ground_truth_path, mode=mode)
+        score_case(fixture_path, ground_truth_path, mode=mode, trace=trace)
         for mode in CG_WL_MODES
     )
 
@@ -262,6 +269,7 @@ def score_v0_baseline(
     *,
     mode: CGWLMode = DEFAULT_CG_WL_MODE,
     all_modes: bool = False,
+    trace: bool = False,
 ) -> tuple[ScoreReport, ...]:
     reports = []
     modes = CG_WL_MODES if all_modes else (mode,)
@@ -269,7 +277,7 @@ def score_v0_baseline(
         fixture_path = resolve_fixture_json(case, build)
         gt_path = resolve_gt_json(case, build)
         reports.extend(
-            score_case(fixture_path, gt_path, mode=mode)
+            score_case(fixture_path, gt_path, mode=mode, trace=trace)
             for mode in modes
         )
     return tuple(reports)
@@ -420,12 +428,14 @@ def format_report(r: ScoreReport) -> str:
         f"TP={p.tp} FP={p.fp} FN={p.fn} TN={p.tn}",
         f"PR={p.precision:.2f} RE={p.recall:.2f} F1={p.f1:.2f} ARI={p.ari:.2f}",
     ])
+    if r.trace:
+        lines.extend(["", format_cg_wl_trace(r.trace)])
     return "\n".join(lines)
 
 
 def score_report_to_dict(report: ScoreReport) -> dict:
     p = report.pairwise
-    return {
+    data = {
         "case": report.case,
         "build": report.build,
         "mode": report.mode,
@@ -469,6 +479,20 @@ def score_report_to_dict(report: ScoreReport) -> dict:
             for origin in report.origins
         ],
     }
+    if report.trace:
+        data["trace"] = [
+            {
+                "round": step.round_index,
+                "state": (
+                    "seed"
+                    if step.round_index == 0
+                    else "changed" if step.changed else "fixpoint"
+                ),
+                "clusters": [list(cluster) for cluster in step.clusters],
+            }
+            for step in report.trace
+        ]
+    return data
 
 
 def reports_to_dict(reports: tuple[ScoreReport, ...]) -> dict:
@@ -522,6 +546,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--json-output",
         help="write the score result set to one JSON file",
     )
+    parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="print and optionally serialize every CG-WL round partition",
+    )
     return parser
 
 
@@ -535,7 +564,11 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error(
                     "--baseline cannot be combined with fixture, ground_truth, or --build"
                 )
-            reports = score_v0_baseline(mode=args.mode, all_modes=args.all_modes)
+            reports = score_v0_baseline(
+                mode=args.mode,
+                all_modes=args.all_modes,
+                trace=args.trace,
+            )
         else:
             if args.fixture is None:
                 parser.error("fixture or --baseline is required")
@@ -548,12 +581,17 @@ def main(argv: list[str] | None = None) -> int:
                 gt_path = args.ground_truth
 
             if args.all_modes:
-                reports = score_all_modes(fixture_path, gt_path)
+                reports = score_all_modes(
+                    fixture_path,
+                    gt_path,
+                    trace=args.trace,
+                )
             else:
                 reports = (score_case(
                     fixture_path,
                     gt_path,
                     mode=args.mode,
+                    trace=args.trace,
                 ),)
 
         print("\n\n".join(format_report(report) for report in reports))

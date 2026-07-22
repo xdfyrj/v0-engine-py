@@ -65,6 +65,7 @@ python3 compile.py family_graph_03 --build O3KS
 python3 run_case.py family_graph_03
 python3 run_case.py family_graph_03 --build O3KS
 python3 run_case.py family_graph_03 --all-modes
+python3 run_case.py family_graph_03 --trace
 ```
 
 각 단계를 단독 실행할 수도 있다.
@@ -74,6 +75,7 @@ python3 gt_extractor.py family_graph_03
 python3 binary_extractor.py family_graph_03
 python3 engine.py family_graph_03 --mode full
 python3 scores.py family_graph_03 --mode full
+python3 engine.py family_graph_03 --trace
 ```
 
 기본 build는 `O3S`이다. `O3KS`는 `--cfg keep`을 사용한 O3K binary에서 파생된 stripped build이다.

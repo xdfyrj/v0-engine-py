@@ -61,6 +61,13 @@ class RelationGraphView:
 
 
 @dataclass(frozen=True)
+class CGWLRoundTrace:
+    round_index: int
+    changed: bool | None
+    clusters: tuple[tuple[NodeId, ...], ...]
+
+
+@dataclass(frozen=True)
 class CGWLResult:
     """
     Result of Call-Graph Weisfeiler-Lehman.
@@ -71,12 +78,14 @@ class CGWLResult:
     cluster_id_by_node: dict[NodeId, int]
     clusters: list[list[NodeId]]
     rounds: int
+    trace: tuple[CGWLRoundTrace, ...] = ()
 
 
 def run_cg_wl(
     case: Case,
     *,
     mode: CGWLMode = DEFAULT_CG_WL_MODE,
+    trace: bool = False,
 ) -> CGWLResult:
     """
     Run Call-Graph Weisfeiler-Lehman.
@@ -93,13 +102,23 @@ def run_cg_wl(
     validate_cg_wl_mode(mode)
     view = build_relation_graph_view(case)
     colors = make_initial_cg_wl_colors(case, view, mode=mode)
+    round_trace = (
+        [_make_round_trace(case, 0, None, colors)]
+        if trace
+        else []
+    )
 
     max_rounds = len(view.node_ids)
 
     for round_index in range(1, max_rounds + 1):
         new_colors = refine_cg_wl_once(case, view, colors, mode=mode)
+        changed = not same_partition(view.node_ids, colors, new_colors)
+        if trace:
+            round_trace.append(
+                _make_round_trace(case, round_index, changed, new_colors)
+            )
 
-        if same_partition(view.node_ids, colors, new_colors):
+        if not changed:
             clusters = make_scored_clusters(case, new_colors)
             cluster_id_by_node = make_cluster_id_by_node(clusters)
 
@@ -108,6 +127,7 @@ def run_cg_wl(
                 cluster_id_by_node=cluster_id_by_node,
                 clusters=clusters,
                 rounds=round_index,
+                trace=tuple(round_trace),
             )
 
         colors = new_colors
@@ -311,6 +331,37 @@ def make_cluster_id_by_node(
     return cluster_id_by_node
 
 
+def _make_round_trace(
+    case: Case,
+    round_index: int,
+    changed: bool | None,
+    colors: dict[NodeId, Color],
+) -> CGWLRoundTrace:
+    return CGWLRoundTrace(
+        round_index=round_index,
+        changed=changed,
+        clusters=tuple(
+            tuple(cluster)
+            for cluster in make_scored_clusters(case, colors)
+        ),
+    )
+
+
+def format_cg_wl_trace(trace: tuple[CGWLRoundTrace, ...]) -> str:
+    lines = ["trace:"]
+    for step in trace:
+        if step.round_index == 0:
+            state = "seed"
+        elif step.changed:
+            state = "changed"
+        else:
+            state = "fixpoint"
+        lines.append(f"  round {step.round_index} ({state}):")
+        for cluster_index, cluster in enumerate(step.clusters, start=1):
+            lines.append(f"    C{cluster_index} = {list(cluster)}")
+    return "\n".join(lines)
+
+
 def same_partition(
     node_ids: list[NodeId],
     colors_a: dict[NodeId, Color],
@@ -358,8 +409,9 @@ def run_fixture_path(
     fixture_path: str,
     *,
     mode: CGWLMode = DEFAULT_CG_WL_MODE,
+    trace: bool = False,
 ) -> CGWLResult:
-    return run_cg_wl(load_case(fixture_path), mode=mode)
+    return run_cg_wl(load_case(fixture_path), mode=mode, trace=trace)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -374,6 +426,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CG_WL_MODE,
         help=f"relation mode. Default: {DEFAULT_CG_WL_MODE}",
     )
+    parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="print the scored partition for seed and every refinement round",
+    )
     return parser
 
 
@@ -387,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         fixture_path = resolve_fixture_json(case, build)
 
     try:
-        result = run_fixture_path(fixture_path, mode=args.mode)
+        result = run_fixture_path(fixture_path, mode=args.mode, trace=args.trace)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -395,6 +452,8 @@ def main(argv: list[str] | None = None) -> int:
     print(result.mode)
     print(result.rounds)
     print(result.clusters)
+    if args.trace:
+        print(format_cg_wl_trace(result.trace))
     return 0
 
 

@@ -6,7 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from build_manifest import BUILD_TARGET, load_and_verify_manifest
-from engine import CG_WL_MODES, DEFAULT_CG_WL_MODE, run_cg_wl
+from engine import (
+    CG_WL_MODES,
+    DEFAULT_CG_WL_MODE,
+    format_cg_wl_trace,
+    run_cg_wl,
+)
 from loader import load_case
 from paths import (
     DEFAULT_BUILD,
@@ -20,11 +25,13 @@ from paths import (
 from scores import format_report, score_all_modes, score_case, write_reports_json
 
 
-def run_fixture_only(fixture_path: str, mode: str) -> None:
-    result = run_cg_wl(load_case(fixture_path), mode=mode)
+def run_fixture_only(fixture_path: str, mode: str, *, trace: bool = False) -> None:
+    result = run_cg_wl(load_case(fixture_path), mode=mode, trace=trace)
     print(result.mode)
     print(result.rounds)
     print(result.clusters)
+    if trace:
+        print(format_cg_wl_trace(result.trace))
 
 
 def run_pipeline(args: argparse.Namespace) -> None:
@@ -83,12 +90,13 @@ def run_pipeline(args: argparse.Namespace) -> None:
     validate_against_fixture(gt, fixture_json)
 
     if args.all_modes:
-        reports = score_all_modes(fixture_json, gt_json)
+        reports = score_all_modes(fixture_json, gt_json, trace=args.trace)
     else:
         reports = (score_case(
             fixture_json,
             gt_json,
             mode=args.mode,
+            trace=args.trace,
         ),)
 
     print("\n\n".join(format_report(report) for report in reports))
@@ -202,6 +210,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--json-output",
         help="write the score result set to one JSON file",
     )
+    parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="print and optionally serialize every CG-WL round partition",
+    )
     return parser
 
 
@@ -221,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.stem.endswith(".fixture.json"):
-            run_fixture_only(args.stem, args.mode)
+            run_fixture_only(args.stem, args.mode, trace=args.trace)
         else:
             run_pipeline(args)
     except Exception as exc:

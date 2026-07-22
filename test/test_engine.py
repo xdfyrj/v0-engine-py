@@ -34,6 +34,23 @@ def check_relation_modes() -> int:
             print(f"FAIL mode {mode}: expected {expected}, got {got}")
             return 1
 
+    traced = run_cg_wl(case, mode="full", trace=True)
+    if len(traced.trace) != traced.rounds + 1:
+        print("FAIL trace must include seed and every refinement round")
+        return 1
+    if traced.trace[0].round_index != 0 or traced.trace[0].changed is not None:
+        print("FAIL trace round 0 must be the seed")
+        return 1
+    if traced.trace[-1].changed is not False:
+        print("FAIL trace must end with the fixpoint confirmation round")
+        return 1
+    if traced.trace[-1].clusters != tuple(tuple(c) for c in traced.clusters):
+        print("FAIL final trace partition must match result clusters")
+        return 1
+    if run_cg_wl(case, mode="full").trace:
+        print("FAIL trace must be empty unless requested")
+        return 1
+
     return 0
 
 
@@ -64,6 +81,7 @@ def main() -> int:
 
     print("neighbor color multiset aggregation PASS")
     print("CG-WL relation modes PASS")
+    print("CG-WL round trace PASS")
     return 0
 
 

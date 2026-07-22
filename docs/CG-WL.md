@@ -364,6 +364,30 @@ rounds = 1
 
 이는 seed partition에 한 번 refinement를 적용했고 partition 변화가 없음을 확인했다는 뜻이다.
 
+### Round trace
+
+기본 실행은 최종 partition과 `rounds`만 반환한다. `--trace`를 지정하면 `round 0` seed부터 마지막 fixpoint 확인까지 scored partition을 모두 기록하고 출력한다.
+
+```bash
+python3 engine.py family_graph_02 --build O3S --trace
+```
+
+출력 형태:
+
+```text
+trace:
+  round 0 (seed):
+    C1 = ['FUN_...', 'FUN_...']
+  round 1 (changed):
+    C1 = ['FUN_...']
+    C2 = ['FUN_...']
+  round 2 (fixpoint):
+    C1 = ['FUN_...']
+    C2 = ['FUN_...']
+```
+
+마지막 `fixpoint` partition은 직전 partition과 동일하다. 이 라운드는 새로운 분할이 아니라 변화가 없음을 확인한 refinement다. Trace의 cluster 이름은 각 라운드 안에서만 사용하는 표시이며, 라운드 사이의 `C1`이 같은 color라는 뜻은 아니다.
+
 ## 12. Final cluster
 
 Fixpoint color별로 `scored=true` node만 모은다.
@@ -388,6 +412,7 @@ mode
 cluster_id_by_node
 clusters
 rounds
+trace (`--trace`를 요청한 경우)
 ```
 
 예를 들어 첫 cluster의 member map은 다음과 같다.

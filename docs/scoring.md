@@ -50,6 +50,14 @@ TP=4 FP=1 FN=6 TN=67
 PR=0.80 RE=0.40 F1=0.53 ARI=0.49
 ```
 
+라운드별 scored partition도 함께 보려면 `--trace`를 사용한다.
+
+```bash
+python3 scores.py family_graph_03 --trace
+```
+
+이 경우 `round 0(seed)`부터 마지막 `fixpoint` 확인 라운드까지 CLI에 추가로 출력된다.
+
 ## 3. 전체 함수 호출 순서
 
 ```text
@@ -466,6 +474,7 @@ candidate_count, pair_count, rounds
 clusters
 origins
 pairwise score
+trace (`--trace`를 요청한 경우)
 ```
 
 이 객체 하나에서 CLI text와 JSON을 모두 만든다. Scoring을 다시 실행하는 별도 report generator는 없다.
@@ -517,6 +526,8 @@ Top-level schema:
 ```
 
 실제 JSON에는 float의 계산값을 저장하고 CLI만 소수점 둘째 자리로 표시한다.
+
+`--trace`와 `--json-output`을 함께 사용하면 각 결과에 `trace` 배열도 저장된다. `--trace`를 생략하면 기존 JSON schema와 baseline 파일에는 `trace` field가 추가되지 않는다.
 
 ## 15. Mode와 baseline 실행
 
