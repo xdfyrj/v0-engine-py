@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-`engine.py`는 fixture JSON의 call graph만 보고 scored user 함수를 cluster로 묶는다.
+CallKin의 `engine.py`는 fixture JSON의 call graph만 보고 scored user 함수를 cluster로 묶는다.
 
 ```text
 fixtures/family_graph_01.O3S.fixture.json

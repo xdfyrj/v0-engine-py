@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-`gt_extractor.py`는 non-stripped Rust binary의 symbol table에서 두 파일을 만든다.
+CallKin의 `gt_extractor.py`는 non-stripped Rust binary의 symbol table에서 두 파일을 만든다.
 
 ```text
 gt_bin/family_graph_01.O3S.gt.bin

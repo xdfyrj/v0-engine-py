@@ -2,7 +2,7 @@
 
 ## 1. 목적과 입력 경계
 
-`binary_extractor.py`는 stripped binary를 radare2로 분석해 CG-WL 입력인 fixture JSON을 만든다.
+CallKin의 `binary_extractor.py`는 stripped binary를 radare2로 분석해 CG-WL 입력인 fixture JSON을 만든다.
 
 ```text
 bin/family_graph_01.O3S.fixture.bin

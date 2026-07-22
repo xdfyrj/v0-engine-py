@@ -1,6 +1,6 @@
-# v0-engine-py
+# CallKin
 
-Rust monomorphized function family를 stripped binary의 call graph 관계로 다시 묶는 연구용 Python prototype이다.
+CallKin은 Rust monomorphized function family를 stripped binary의 call graph 관계로 다시 묶는 연구용 Python prototype이다.
 
 이 저장소는 다음 과정을 재현한다.
 

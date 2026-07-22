@@ -2,7 +2,7 @@
 
 ## 1. 범위
 
-실제 Rust source compilation pipeline은 `compile.py`에 구현되어 있다.
+CallKin의 Rust source compilation pipeline은 `compile.py`에 구현되어 있다.
 
 ```text
 Rust source

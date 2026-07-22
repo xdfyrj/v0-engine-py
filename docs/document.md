@@ -1,10 +1,10 @@
-# 전체 구현 안내
+# CallKin 전체 구현 안내
 
 ## 1. 프로젝트가 답하려는 질문
 
 Rust generic 함수는 하나의 source definition에서 여러 monomorphized instance로 컴파일된다. 최종 stripped binary에는 source의 generic 이름과 concrete type 정보가 남지 않을 수 있다.
 
-이 prototype은 다음의 제한된 질문을 다룬다.
+CallKin은 다음의 제한된 질문을 다룬다.
 
 > 분석 대상 user 함수 집합이 주어졌을 때, stripped binary에서 관찰되는 caller/callee 관계만으로 같은 source origin에서 나온 monomorphized 함수들을 다시 묶을 수 있는가?
 

@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-`scores.py`는 CG-WL predicted partition과 compiler-symbol ground-truth partition을 비교한다.
+CallKin의 `scores.py`는 CG-WL predicted partition과 compiler-symbol ground-truth partition을 비교한다.
 
 ```text
 fixtures/family_graph_03.O3S.fixture.json
