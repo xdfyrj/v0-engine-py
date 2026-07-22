@@ -276,6 +276,7 @@ def _publish_file(source: Path, output: str) -> None:
 
 
 def compile_case(args: argparse.Namespace) -> list[str]:
+    """Build and publish one matched non-stripped/stripped binary pair."""
     profile = compiled_profile_for_build(args.build)
 
     # Validate the complete toolchain before replacing either binary.

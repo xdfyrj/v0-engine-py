@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def run_step(arguments: list[str]) -> None:
+    """Run one Python command and stop the pipeline if it fails."""
     command = [sys.executable, *arguments]
     print(f"\n+ {shlex.join(command)}", flush=True)
     completed = subprocess.run(command, cwd=ROOT, check=False)
